@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { 
   LayoutDashboard, 
@@ -13,8 +13,8 @@ import {
   Bell,
   Shield
 } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
+import { useAuth } from "@/contexts/AuthContext";
 
 interface AdminLayoutProps {
   children: React.ReactNode;
@@ -32,12 +32,41 @@ const menuItems = [
 const AdminLayout = ({ children }: AdminLayoutProps) => {
   const location = useLocation();
   const navigate = useNavigate();
+  const { user, isAdmin, isLoading, signOut } = useAuth();
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
-  const handleLogout = () => {
+  // Redirect if not logged in or not admin
+  useEffect(() => {
+    if (!isLoading) {
+      if (!user) {
+        navigate("/auth");
+      } else if (!isAdmin) {
+        toast.error("Access denied. Admin privileges required.");
+        navigate("/dashboard");
+      }
+    }
+  }, [user, isAdmin, isLoading, navigate]);
+
+  const handleLogout = async () => {
+    await signOut();
     toast.success("Logged out successfully");
     navigate("/");
   };
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+          <p className="text-muted-foreground">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!user || !isAdmin) {
+    return null;
+  }
 
   return (
     <div className="min-h-screen bg-background flex">

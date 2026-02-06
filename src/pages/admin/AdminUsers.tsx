@@ -1,10 +1,8 @@
-import { useState } from "react";
 import AdminLayout from "@/components/admin/AdminLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { 
   Search, 
-  Filter, 
   MoreVertical, 
   Eye, 
   Ban, 
@@ -20,45 +18,47 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
-
-const initialUsers = [
-  { id: 1, name: "John Doe", email: "john@example.com", phone: "+1 234 567 8900", country: "United States", joined: "2024-01-20", deposits: "$5,230", withdrawals: "$1,200", status: "Active" },
-  { id: 2, name: "Sarah Wilson", email: "sarah@example.com", phone: "+44 789 012 3456", country: "United Kingdom", joined: "2024-01-19", deposits: "$12,450", withdrawals: "$3,500", status: "Active" },
-  { id: 3, name: "Mike Johnson", email: "mike@example.com", phone: "+1 345 678 9012", country: "Canada", joined: "2024-01-18", deposits: "$0", withdrawals: "$0", status: "Pending" },
-  { id: 4, name: "Emily Davis", email: "emily@example.com", phone: "+61 456 789 0123", country: "Australia", joined: "2024-01-17", deposits: "$3,800", withdrawals: "$800", status: "Active" },
-  { id: 5, name: "Tom Brown", email: "tom@example.com", phone: "+49 567 890 1234", country: "Germany", joined: "2024-01-16", deposits: "$1,200", withdrawals: "$0", status: "Suspended" },
-  { id: 6, name: "Lisa Chen", email: "lisa@example.com", phone: "+65 678 901 2345", country: "Singapore", joined: "2024-01-15", deposits: "$8,900", withdrawals: "$2,100", status: "Active" },
-  { id: 7, name: "James Smith", email: "james@example.com", phone: "+1 789 012 3456", country: "United States", joined: "2024-01-14", deposits: "$25,000", withdrawals: "$5,000", status: "Active" },
-  { id: 8, name: "Anna Miller", email: "anna@example.com", phone: "+33 890 123 4567", country: "France", joined: "2024-01-13", deposits: "$6,500", withdrawals: "$1,500", status: "Active" },
-];
+import { useState } from "react";
+import { useAdminUsers } from "@/hooks/useAdminData";
+import { format } from "date-fns";
 
 const AdminUsers = () => {
-  const [users, setUsers] = useState(initialUsers);
+  const { users, userDeposits, userWithdrawals, isLoading, updateUserStatus, refetch } = useAdminUsers();
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
 
   const filteredUsers = users.filter(user => {
-    const matchesSearch = user.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    const matchesSearch = (user.full_name?.toLowerCase() || '').includes(searchQuery.toLowerCase()) ||
                          user.email.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesStatus = statusFilter === "all" || user.status.toLowerCase() === statusFilter;
+    const matchesStatus = statusFilter === "all" || (user.status || 'active').toLowerCase() === statusFilter;
     return matchesSearch && matchesStatus;
   });
 
-  const handleStatusChange = (userId: number, newStatus: string) => {
-    setUsers(users.map(user => 
-      user.id === userId ? { ...user, status: newStatus } : user
-    ));
-    toast.success(`User status updated to ${newStatus}`);
-  };
-
-  const handleDelete = (userId: number) => {
-    setUsers(users.filter(user => user.id !== userId));
-    toast.success("User deleted successfully");
+  const handleStatusChange = async (userId: string, newStatus: string) => {
+    const result = await updateUserStatus(userId, newStatus);
+    if (result.success) {
+      toast.success(`User status updated to ${newStatus}`);
+    } else {
+      toast.error("Failed to update user status");
+    }
   };
 
   const handleSendEmail = (email: string) => {
     toast.success(`Email dialog opened for ${email}`);
   };
+
+  if (isLoading) {
+    return (
+      <AdminLayout>
+        <div className="flex items-center justify-center h-64">
+          <div className="text-center">
+            <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+            <p className="text-muted-foreground">Loading users...</p>
+          </div>
+        </div>
+      </AdminLayout>
+    );
+  }
 
   return (
     <AdminLayout>
@@ -105,19 +105,19 @@ const AdminUsers = () => {
           </div>
           <div className="dashboard-card text-center">
             <p className="text-2xl font-heading font-bold text-primary">
-              {users.filter(u => u.status === "Active").length}
+              {users.filter(u => (u.status || 'active') === "active").length}
             </p>
             <p className="text-muted-foreground text-sm">Active</p>
           </div>
           <div className="dashboard-card text-center">
             <p className="text-2xl font-heading font-bold text-warning">
-              {users.filter(u => u.status === "Pending").length}
+              {users.filter(u => u.status === "pending").length}
             </p>
             <p className="text-muted-foreground text-sm">Pending</p>
           </div>
           <div className="dashboard-card text-center">
             <p className="text-2xl font-heading font-bold text-destructive">
-              {users.filter(u => u.status === "Suspended").length}
+              {users.filter(u => u.status === "suspended").length}
             </p>
             <p className="text-muted-foreground text-sm">Suspended</p>
           </div>
@@ -126,82 +126,92 @@ const AdminUsers = () => {
         {/* Users Table */}
         <div className="dashboard-card">
           <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="table-header">
-                  <th className="text-left py-3 px-4 rounded-l-lg">User</th>
-                  <th className="text-left py-3 px-4">Country</th>
-                  <th className="text-left py-3 px-4">Joined</th>
-                  <th className="text-left py-3 px-4">Total Deposits</th>
-                  <th className="text-left py-3 px-4">Withdrawals</th>
-                  <th className="text-left py-3 px-4">Status</th>
-                  <th className="text-left py-3 px-4 rounded-r-lg">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredUsers.map((user) => (
-                  <tr key={user.id} className="table-row">
-                    <td className="py-4 px-4">
-                      <div>
-                        <p className="font-medium">{user.name}</p>
-                        <p className="text-sm text-muted-foreground">{user.email}</p>
-                      </div>
-                    </td>
-                    <td className="py-4 px-4 text-muted-foreground">{user.country}</td>
-                    <td className="py-4 px-4 text-muted-foreground">{user.joined}</td>
-                    <td className="py-4 px-4 text-success">{user.deposits}</td>
-                    <td className="py-4 px-4 text-warning">{user.withdrawals}</td>
-                    <td className="py-4 px-4">
-                      <span className={`status-badge ${
-                        user.status === "Active" ? "status-active" :
-                        user.status === "Pending" ? "status-pending" :
-                        "status-inactive"
-                      }`}>
-                        {user.status}
-                      </span>
-                    </td>
-                    <td className="py-4 px-4">
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="sm">
-                            <MoreVertical className="w-4 h-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" className="bg-card border-border">
-                          <DropdownMenuItem onClick={() => toast.info("View user details")}>
-                            <Eye className="w-4 h-4 mr-2" />
-                            View Details
-                          </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => handleSendEmail(user.email)}>
-                            <Mail className="w-4 h-4 mr-2" />
-                            Send Email
-                          </DropdownMenuItem>
-                          {user.status !== "Active" && (
-                            <DropdownMenuItem onClick={() => handleStatusChange(user.id, "Active")}>
-                              <CheckCircle className="w-4 h-4 mr-2" />
-                              Activate
-                            </DropdownMenuItem>
-                          )}
-                          {user.status !== "Suspended" && (
-                            <DropdownMenuItem onClick={() => handleStatusChange(user.id, "Suspended")}>
-                              <Ban className="w-4 h-4 mr-2" />
-                              Suspend
-                            </DropdownMenuItem>
-                          )}
-                          <DropdownMenuItem 
-                            onClick={() => handleDelete(user.id)}
-                            className="text-destructive"
-                          >
-                            <Trash2 className="w-4 h-4 mr-2" />
-                            Delete
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </td>
+            {filteredUsers.length === 0 ? (
+              <p className="text-muted-foreground text-center py-8">No users found</p>
+            ) : (
+              <table className="w-full">
+                <thead>
+                  <tr className="table-header">
+                    <th className="text-left py-3 px-4 rounded-l-lg">User</th>
+                    <th className="text-left py-3 px-4">Country</th>
+                    <th className="text-left py-3 px-4">Joined</th>
+                    <th className="text-left py-3 px-4">Total Deposits</th>
+                    <th className="text-left py-3 px-4">Withdrawals</th>
+                    <th className="text-left py-3 px-4">Status</th>
+                    <th className="text-left py-3 px-4 rounded-r-lg">Actions</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {filteredUsers.map((user) => (
+                    <tr key={user.id} className="table-row">
+                      <td className="py-4 px-4">
+                        <div>
+                          <p className="font-medium">{user.full_name || 'Unknown'}</p>
+                          <p className="text-sm text-muted-foreground">{user.email}</p>
+                        </div>
+                      </td>
+                      <td className="py-4 px-4 text-muted-foreground">{user.country || 'N/A'}</td>
+                      <td className="py-4 px-4 text-muted-foreground">
+                        {user.created_at ? format(new Date(user.created_at), 'yyyy-MM-dd') : 'N/A'}
+                      </td>
+                      <td className="py-4 px-4 text-success">
+                        ${(userDeposits[user.user_id] || 0).toLocaleString()}
+                      </td>
+                      <td className="py-4 px-4 text-warning">
+                        ${(userWithdrawals[user.user_id] || 0).toLocaleString()}
+                      </td>
+                      <td className="py-4 px-4">
+                        <span className={`status-badge ${
+                          (user.status || 'active') === "active" ? "status-active" :
+                          user.status === "pending" ? "status-pending" :
+                          "status-inactive"
+                        }`}>
+                          {user.status || 'active'}
+                        </span>
+                      </td>
+                      <td className="py-4 px-4">
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="sm">
+                              <MoreVertical className="w-4 h-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" className="bg-card border-border">
+                            <DropdownMenuItem onClick={() => toast.info("View user details")}>
+                              <Eye className="w-4 h-4 mr-2" />
+                              View Details
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => handleSendEmail(user.email)}>
+                              <Mail className="w-4 h-4 mr-2" />
+                              Send Email
+                            </DropdownMenuItem>
+                            {(user.status || 'active') !== "active" && (
+                              <DropdownMenuItem onClick={() => handleStatusChange(user.user_id, "active")}>
+                                <CheckCircle className="w-4 h-4 mr-2" />
+                                Activate
+                              </DropdownMenuItem>
+                            )}
+                            {user.status !== "suspended" && (
+                              <DropdownMenuItem onClick={() => handleStatusChange(user.user_id, "suspended")}>
+                                <Ban className="w-4 h-4 mr-2" />
+                                Suspend
+                              </DropdownMenuItem>
+                            )}
+                            <DropdownMenuItem 
+                              onClick={() => toast.info("Delete user")}
+                              className="text-destructive"
+                            >
+                              <Trash2 className="w-4 h-4 mr-2" />
+                              Delete
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
           </div>
         </div>
       </div>
