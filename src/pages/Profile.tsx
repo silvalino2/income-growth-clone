@@ -1,26 +1,56 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import DashboardLayout from "@/components/dashboard/DashboardLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { User, Mail, Phone, MapPin, Shield, Camera } from "lucide-react";
 import { toast } from "sonner";
+import { useAuth } from "@/contexts/AuthContext";
+import { supabase } from "@/integrations/supabase/client";
+import { format } from "date-fns";
 
 const Profile = () => {
+  const { user, profile, refreshProfile } = useAuth();
   const [isEditing, setIsEditing] = useState(false);
-  const [profile, setProfile] = useState({
-    firstName: "John",
-    lastName: "Doe",
-    email: "john.doe@example.com",
-    phone: "+1 234 567 8900",
-    country: "United States",
-    address: "123 Investment St, New York, NY 10001",
-    joinDate: "January 10, 2024"
+  const [isSaving, setIsSaving] = useState(false);
+  const [formData, setFormData] = useState({
+    full_name: "",
+    phone: "",
+    country: "",
   });
 
-  const handleSave = () => {
-    toast.success("Profile updated successfully!");
-    setIsEditing(false);
+  useEffect(() => {
+    if (profile) {
+      setFormData({
+        full_name: profile.full_name || "",
+        phone: profile.phone || "",
+        country: profile.country || "",
+      });
+    }
+  }, [profile]);
+
+  const handleSave = async () => {
+    if (!user) return;
+    
+    setIsSaving(true);
+    const { error } = await supabase
+      .from('profiles')
+      .update(formData)
+      .eq('user_id', user.id);
+
+    if (error) {
+      toast.error("Failed to update profile");
+    } else {
+      toast.success("Profile updated successfully!");
+      await refreshProfile();
+      setIsEditing(false);
+    }
+    setIsSaving(false);
   };
+
+  const displayName = profile?.full_name || user?.email?.split('@')[0] || 'User';
+  const joinDate = profile?.created_at 
+    ? format(new Date(profile.created_at), 'MMMM d, yyyy')
+    : 'Unknown';
 
   return (
     <DashboardLayout>
@@ -34,8 +64,9 @@ const Profile = () => {
             onClick={() => isEditing ? handleSave() : setIsEditing(true)}
             className={isEditing ? "btn-hero" : ""}
             variant={isEditing ? "default" : "outline"}
+            disabled={isSaving}
           >
-            {isEditing ? "Save Changes" : "Edit Profile"}
+            {isSaving ? "Saving..." : isEditing ? "Save Changes" : "Edit Profile"}
           </Button>
         </div>
 
@@ -46,23 +77,16 @@ const Profile = () => {
               <div className="w-32 h-32 rounded-full bg-primary/20 flex items-center justify-center mx-auto">
                 <User className="w-16 h-16 text-primary" />
               </div>
-              {isEditing && (
-                <button className="absolute bottom-0 right-0 w-10 h-10 bg-primary rounded-full flex items-center justify-center">
-                  <Camera className="w-5 h-5 text-primary-foreground" />
-                </button>
-              )}
             </div>
-            <h2 className="text-2xl font-heading font-bold mb-1">
-              {profile.firstName} {profile.lastName}
-            </h2>
-            <p className="text-muted-foreground mb-4">{profile.email}</p>
+            <h2 className="text-2xl font-heading font-bold mb-1">{displayName}</h2>
+            <p className="text-muted-foreground mb-4">{user?.email}</p>
             <div className="flex items-center justify-center gap-2 text-sm">
               <Shield className="w-4 h-4 text-primary" />
               <span className="text-primary">Verified Investor</span>
             </div>
             <div className="mt-6 pt-6 border-t border-border">
               <p className="text-muted-foreground text-sm">Member since</p>
-              <p className="font-medium">{profile.joinDate}</p>
+              <p className="font-medium">{joinDate}</p>
             </div>
           </div>
 
@@ -70,20 +94,11 @@ const Profile = () => {
           <div className="lg:col-span-2 dashboard-card">
             <h3 className="text-xl font-heading font-semibold mb-6">Personal Information</h3>
             <div className="grid sm:grid-cols-2 gap-6">
-              <div>
-                <label className="block text-sm font-medium mb-2">First Name</label>
+              <div className="sm:col-span-2">
+                <label className="block text-sm font-medium mb-2">Full Name</label>
                 <Input
-                  value={profile.firstName}
-                  onChange={(e) => setProfile({...profile, firstName: e.target.value})}
-                  disabled={!isEditing}
-                  className="input-dark"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium mb-2">Last Name</label>
-                <Input
-                  value={profile.lastName}
-                  onChange={(e) => setProfile({...profile, lastName: e.target.value})}
+                  value={formData.full_name}
+                  onChange={(e) => setFormData({...formData, full_name: e.target.value})}
                   disabled={!isEditing}
                   className="input-dark"
                 />
@@ -94,9 +109,8 @@ const Profile = () => {
                   <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
                   <Input
                     type="email"
-                    value={profile.email}
-                    onChange={(e) => setProfile({...profile, email: e.target.value})}
-                    disabled={!isEditing}
+                    value={user?.email || ""}
+                    disabled
                     className="input-dark pl-10"
                   />
                 </div>
@@ -107,33 +121,21 @@ const Profile = () => {
                   <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
                   <Input
                     type="tel"
-                    value={profile.phone}
-                    onChange={(e) => setProfile({...profile, phone: e.target.value})}
+                    value={formData.phone}
+                    onChange={(e) => setFormData({...formData, phone: e.target.value})}
                     disabled={!isEditing}
                     className="input-dark pl-10"
                   />
                 </div>
               </div>
-              <div>
+              <div className="sm:col-span-2">
                 <label className="block text-sm font-medium mb-2">Country</label>
                 <Input
-                  value={profile.country}
-                  onChange={(e) => setProfile({...profile, country: e.target.value})}
+                  value={formData.country}
+                  onChange={(e) => setFormData({...formData, country: e.target.value})}
                   disabled={!isEditing}
                   className="input-dark"
                 />
-              </div>
-              <div>
-                <label className="block text-sm font-medium mb-2">Address</label>
-                <div className="relative">
-                  <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
-                  <Input
-                    value={profile.address}
-                    onChange={(e) => setProfile({...profile, address: e.target.value})}
-                    disabled={!isEditing}
-                    className="input-dark pl-10"
-                  />
-                </div>
               </div>
             </div>
 
@@ -142,8 +144,8 @@ const Profile = () => {
                 <Button variant="outline" onClick={() => setIsEditing(false)}>
                   Cancel
                 </Button>
-                <Button onClick={handleSave} className="btn-hero">
-                  Save Changes
+                <Button onClick={handleSave} className="btn-hero" disabled={isSaving}>
+                  {isSaving ? "Saving..." : "Save Changes"}
                 </Button>
               </div>
             )}

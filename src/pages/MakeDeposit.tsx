@@ -4,48 +4,58 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Check, Bitcoin, Wallet } from "lucide-react";
 import { toast } from "sonner";
-
-const plans = [
-  { name: "STARTER", roi: "15%", period: "24hrs", min: 50, max: 499 },
-  { name: "BASIC", roi: "30%", period: "48hrs", min: 500, max: 3999 },
-  { name: "SILVER", roi: "50%", period: "72hrs", min: 4000, max: 9999 },
-  { name: "GOLD", roi: "80%", period: "92hrs", min: 10000, max: 20000 },
-  { name: "REAL ESTATE", roi: "100%", period: "5 days", min: 21000, max: Infinity },
-];
-
-const paymentMethods = [
-  { id: "btc", name: "Bitcoin", icon: Bitcoin, address: "bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh" },
-  { id: "eth", name: "Ethereum", icon: Wallet, address: "0x71C7656EC7ab88b098defB751B7401B5f6d8976F" },
-  { id: "usdt", name: "USDT (TRC20)", icon: Wallet, address: "TXkVbVBRvF5ZGH6hKMH3snZvZJUq8cNvJT" },
-];
+import { useInvestmentPlans, useUserDeposits, usePlatformWallets } from "@/hooks/useUserData";
 
 const MakeDeposit = () => {
-  const [selectedPlan, setSelectedPlan] = useState<string | null>(null);
+  const { plans, isLoading: plansLoading } = useInvestmentPlans();
+  const { createDeposit } = useUserDeposits();
+  const { wallets, isLoading: walletsLoading } = usePlatformWallets();
+  
+  const [selectedPlanId, setSelectedPlanId] = useState<string | null>(null);
   const [amount, setAmount] = useState("");
   const [selectedPayment, setSelectedPayment] = useState<string | null>(null);
   const [step, setStep] = useState(1);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const selectedPlanDetails = plans.find(p => p.name === selectedPlan);
+  const selectedPlan = plans.find(p => p.id === selectedPlanId);
 
-  const handleContinue = () => {
-    if (step === 1 && selectedPlan) {
+  const paymentMethods = [
+    { id: "btc", name: "Bitcoin", icon: Bitcoin, address: wallets.btc },
+    { id: "eth", name: "Ethereum", icon: Wallet, address: wallets.eth },
+    { id: "usdt", name: "USDT (TRC20)", icon: Wallet, address: wallets.usdt },
+  ];
+
+  const handleContinue = async () => {
+    if (step === 1 && selectedPlanId) {
       setStep(2);
     } else if (step === 2 && amount) {
       const numAmount = parseFloat(amount);
-      if (selectedPlanDetails) {
-        if (numAmount < selectedPlanDetails.min) {
-          toast.error(`Minimum deposit for ${selectedPlan} is $${selectedPlanDetails.min}`);
+      if (selectedPlan) {
+        if (numAmount < selectedPlan.min_amount) {
+          toast.error(`Minimum deposit for ${selectedPlan.name} is $${selectedPlan.min_amount}`);
           return;
         }
-        if (numAmount > selectedPlanDetails.max) {
-          toast.error(`Maximum deposit for ${selectedPlan} is $${selectedPlanDetails.max}`);
+        if (numAmount > selectedPlan.max_amount) {
+          toast.error(`Maximum deposit for ${selectedPlan.name} is $${selectedPlan.max_amount}`);
           return;
         }
       }
       setStep(3);
     } else if (step === 3 && selectedPayment) {
-      toast.success("Deposit request submitted! Please send the payment to complete.");
-      setStep(4);
+      setIsSubmitting(true);
+      const result = await createDeposit(
+        selectedPlanId!,
+        parseFloat(amount),
+        selectedPayment.toUpperCase()
+      );
+      
+      if (result.success) {
+        toast.success("Deposit request submitted! Please send the payment to complete.");
+        setStep(4);
+      } else {
+        toast.error("Failed to submit deposit request");
+      }
+      setIsSubmitting(false);
     }
   };
 
@@ -53,6 +63,19 @@ const MakeDeposit = () => {
     navigator.clipboard.writeText(address);
     toast.success("Address copied to clipboard!");
   };
+
+  if (plansLoading || walletsLoading) {
+    return (
+      <DashboardLayout>
+        <div className="flex items-center justify-center h-64">
+          <div className="text-center">
+            <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+            <p className="text-muted-foreground">Loading...</p>
+          </div>
+        </div>
+      </DashboardLayout>
+    );
+  }
 
   return (
     <DashboardLayout>
@@ -84,29 +107,33 @@ const MakeDeposit = () => {
         {step === 1 && (
           <div className="space-y-6">
             <h2 className="text-xl font-heading font-semibold">Select Investment Plan</h2>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {plans.map((plan) => (
-                <button
-                  key={plan.name}
-                  onClick={() => setSelectedPlan(plan.name)}
-                  className={`p-6 rounded-xl border-2 text-left transition-all ${
-                    selectedPlan === plan.name 
-                      ? "border-primary bg-primary/10" 
-                      : "border-border hover:border-primary/50"
-                  }`}
-                >
-                  <h3 className="font-heading font-bold text-lg text-primary mb-2">{plan.name}</h3>
-                  <p className="text-3xl font-bold mb-2">{plan.roi}</p>
-                  <p className="text-muted-foreground text-sm">Every {plan.period}</p>
-                  <p className="text-sm mt-2">
-                    ${plan.min.toLocaleString()} - {plan.max === Infinity ? "UNLIMITED" : `$${plan.max.toLocaleString()}`}
-                  </p>
-                </button>
-              ))}
-            </div>
+            {plans.length === 0 ? (
+              <p className="text-muted-foreground text-center py-8">No investment plans available at the moment.</p>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {plans.map((plan) => (
+                  <button
+                    key={plan.id}
+                    onClick={() => setSelectedPlanId(plan.id)}
+                    className={`p-6 rounded-xl border-2 text-left transition-all ${
+                      selectedPlanId === plan.id 
+                        ? "border-primary bg-primary/10" 
+                        : "border-border hover:border-primary/50"
+                    }`}
+                  >
+                    <h3 className="font-heading font-bold text-lg text-primary mb-2">{plan.name}</h3>
+                    <p className="text-3xl font-bold mb-2">{plan.roi_percentage}%</p>
+                    <p className="text-muted-foreground text-sm">Every {plan.duration_days} days</p>
+                    <p className="text-sm mt-2">
+                      ${plan.min_amount.toLocaleString()} - ${plan.max_amount.toLocaleString()}
+                    </p>
+                  </button>
+                ))}
+              </div>
+            )}
             <Button 
               onClick={handleContinue} 
-              disabled={!selectedPlan}
+              disabled={!selectedPlanId}
               className="btn-hero"
             >
               Continue
@@ -120,24 +147,24 @@ const MakeDeposit = () => {
             <h2 className="text-xl font-heading font-semibold">Enter Deposit Amount</h2>
             <div className="dashboard-card max-w-md">
               <p className="text-muted-foreground mb-4">
-                Plan: <span className="text-primary font-semibold">{selectedPlan}</span>
+                Plan: <span className="text-primary font-semibold">{selectedPlan?.name}</span>
               </p>
               <div className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium mb-2">Amount (USD)</label>
                   <Input
                     type="number"
-                    placeholder={`Min: $${selectedPlanDetails?.min}`}
+                    placeholder={`Min: $${selectedPlan?.min_amount}`}
                     value={amount}
                     onChange={(e) => setAmount(e.target.value)}
                     className="input-dark text-2xl py-6"
                   />
                 </div>
-                {amount && selectedPlanDetails && (
+                {amount && selectedPlan && (
                   <div className="p-4 bg-secondary/50 rounded-lg">
                     <p className="text-muted-foreground text-sm">Expected Return:</p>
                     <p className="text-2xl font-heading font-bold text-success">
-                      ${(parseFloat(amount) * (parseFloat(selectedPlanDetails.roi) / 100)).toFixed(2)}
+                      ${(parseFloat(amount) * (selectedPlan.roi_percentage / 100)).toFixed(2)}
                     </p>
                   </div>
                 )}
@@ -172,7 +199,13 @@ const MakeDeposit = () => {
             </div>
             <div className="flex gap-4">
               <Button variant="outline" onClick={() => setStep(2)}>Back</Button>
-              <Button onClick={handleContinue} disabled={!selectedPayment} className="btn-hero">Continue</Button>
+              <Button 
+                onClick={handleContinue} 
+                disabled={!selectedPayment || isSubmitting} 
+                className="btn-hero"
+              >
+                {isSubmitting ? "Submitting..." : "Continue"}
+              </Button>
             </div>
           </div>
         )}
@@ -206,7 +239,7 @@ const MakeDeposit = () => {
               <div className="bg-warning/10 border border-warning/30 p-4 rounded-lg">
                 <p className="text-warning text-sm">
                   <strong>Important:</strong> After sending the payment, it may take 10-30 minutes to confirm. 
-                  Your deposit will be activated automatically once confirmed.
+                  Your deposit will be activated automatically once confirmed by an admin.
                 </p>
               </div>
             </div>

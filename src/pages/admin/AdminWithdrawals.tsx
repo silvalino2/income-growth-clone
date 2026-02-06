@@ -10,42 +10,50 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
-
-const initialWithdrawals = [
-  { id: 1, user: "John Doe", email: "john@example.com", amount: "$1,500", method: "Bitcoin", address: "bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh", date: "2024-01-20 16:45", status: "Pending" },
-  { id: 2, user: "Sarah Wilson", email: "sarah@example.com", amount: "$3,000", method: "Ethereum", address: "0x71C7656EC7ab88b098defB751B7401B5f6d8976F", date: "2024-01-20 10:20", status: "Pending" },
-  { id: 3, user: "Emily Davis", email: "emily@example.com", amount: "$500", method: "USDT", address: "TXkVbVBRvF5ZGH6hKMH3snZvZJUq8cNvJT", date: "2024-01-19 14:30", status: "Completed" },
-  { id: 4, user: "Lisa Chen", email: "lisa@example.com", amount: "$2,100", method: "Bitcoin", address: "bc1q...9y0z", date: "2024-01-19 08:15", status: "Completed" },
-  { id: 5, user: "James Smith", email: "james@example.com", amount: "$5,000", method: "Ethereum", address: "0x5d6...7e8f", date: "2024-01-18 22:00", status: "Rejected" },
-  { id: 6, user: "Anna Miller", email: "anna@example.com", amount: "$1,200", method: "USDT", address: "TXk...wKL", date: "2024-01-17 17:40", status: "Completed" },
-];
+import { useAdminWithdrawals } from "@/hooks/useAdminData";
+import { format } from "date-fns";
 
 const AdminWithdrawals = () => {
-  const [withdrawals, setWithdrawals] = useState(initialWithdrawals);
+  const { withdrawals, isLoading, updateWithdrawalStatus } = useAdminWithdrawals();
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
 
   const filteredWithdrawals = withdrawals.filter(withdrawal => {
-    const matchesSearch = withdrawal.user.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                         withdrawal.email.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesStatus = statusFilter === "all" || withdrawal.status.toLowerCase() === statusFilter;
+    const matchesSearch = (withdrawal.user_name?.toLowerCase() || '').includes(searchQuery.toLowerCase()) ||
+                         (withdrawal.user_email?.toLowerCase() || '').includes(searchQuery.toLowerCase());
+    const matchesStatus = statusFilter === "all" || (withdrawal.status || 'pending').toLowerCase() === statusFilter;
     return matchesSearch && matchesStatus;
   });
 
-  const handleStatusChange = (withdrawalId: number, newStatus: string) => {
-    setWithdrawals(withdrawals.map(withdrawal => 
-      withdrawal.id === withdrawalId ? { ...withdrawal, status: newStatus } : withdrawal
-    ));
-    toast.success(`Withdrawal ${newStatus.toLowerCase()}`);
+  const handleStatusChange = async (withdrawalId: string, newStatus: string) => {
+    const result = await updateWithdrawalStatus(withdrawalId, newStatus);
+    if (result.success) {
+      toast.success(`Withdrawal ${newStatus.toLowerCase()}`);
+    } else {
+      toast.error("Failed to update withdrawal status");
+    }
   };
 
   const pendingTotal = withdrawals
-    .filter(w => w.status === "Pending")
-    .reduce((sum, w) => sum + parseFloat(w.amount.replace(/[$,]/g, "")), 0);
+    .filter(w => w.status === "pending")
+    .reduce((sum, w) => sum + Number(w.amount), 0);
 
   const completedTotal = withdrawals
-    .filter(w => w.status === "Completed")
-    .reduce((sum, w) => sum + parseFloat(w.amount.replace(/[$,]/g, "")), 0);
+    .filter(w => w.status === "approved")
+    .reduce((sum, w) => sum + Number(w.amount), 0);
+
+  if (isLoading) {
+    return (
+      <AdminLayout>
+        <div className="flex items-center justify-center h-64">
+          <div className="text-center">
+            <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+            <p className="text-muted-foreground">Loading withdrawals...</p>
+          </div>
+        </div>
+      </AdminLayout>
+    );
+  }
 
   return (
     <AdminLayout>
@@ -63,7 +71,7 @@ const AdminWithdrawals = () => {
           </div>
           <div className="dashboard-card text-center">
             <p className="text-2xl font-heading font-bold text-warning">
-              {withdrawals.filter(w => w.status === "Pending").length}
+              {withdrawals.filter(w => w.status === "pending").length}
             </p>
             <p className="text-muted-foreground text-sm">Pending</p>
           </div>
@@ -78,12 +86,12 @@ const AdminWithdrawals = () => {
         </div>
 
         {/* Alert for Pending */}
-        {withdrawals.filter(w => w.status === "Pending").length > 0 && (
+        {withdrawals.filter(w => w.status === "pending").length > 0 && (
           <div className="bg-warning/10 border border-warning/30 p-4 rounded-lg flex gap-4">
             <AlertCircle className="w-6 h-6 text-warning flex-shrink-0" />
             <div>
               <p className="font-medium text-warning mb-1">
-                {withdrawals.filter(w => w.status === "Pending").length} pending withdrawal(s) require attention
+                {withdrawals.filter(w => w.status === "pending").length} pending withdrawal(s) require attention
               </p>
               <p className="text-sm text-muted-foreground">
                 Total pending amount: ${pendingTotal.toLocaleString()}
@@ -110,7 +118,7 @@ const AdminWithdrawals = () => {
           >
             <option value="all">All Status</option>
             <option value="pending">Pending</option>
-            <option value="completed">Completed</option>
+            <option value="approved">Approved</option>
             <option value="rejected">Rejected</option>
           </select>
         </div>
@@ -118,78 +126,84 @@ const AdminWithdrawals = () => {
         {/* Withdrawals Table */}
         <div className="dashboard-card">
           <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="table-header">
-                  <th className="text-left py-3 px-4 rounded-l-lg">User</th>
-                  <th className="text-left py-3 px-4">Amount</th>
-                  <th className="text-left py-3 px-4">Method</th>
-                  <th className="text-left py-3 px-4">Wallet Address</th>
-                  <th className="text-left py-3 px-4">Date</th>
-                  <th className="text-left py-3 px-4">Status</th>
-                  <th className="text-left py-3 px-4 rounded-r-lg">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredWithdrawals.map((withdrawal) => (
-                  <tr key={withdrawal.id} className="table-row">
-                    <td className="py-4 px-4">
-                      <div>
-                        <p className="font-medium">{withdrawal.user}</p>
-                        <p className="text-sm text-muted-foreground">{withdrawal.email}</p>
-                      </div>
-                    </td>
-                    <td className="py-4 px-4 text-warning font-semibold">{withdrawal.amount}</td>
-                    <td className="py-4 px-4">{withdrawal.method}</td>
-                    <td className="py-4 px-4">
-                      <code className="text-xs bg-secondary px-2 py-1 rounded break-all max-w-[150px] block truncate">
-                        {withdrawal.address}
-                      </code>
-                    </td>
-                    <td className="py-4 px-4 text-muted-foreground text-sm">{withdrawal.date}</td>
-                    <td className="py-4 px-4">
-                      <span className={`status-badge ${
-                        withdrawal.status === "Completed" ? "status-active" :
-                        withdrawal.status === "Pending" ? "status-pending" :
-                        "status-inactive"
-                      }`}>
-                        {withdrawal.status}
-                      </span>
-                    </td>
-                    <td className="py-4 px-4">
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="sm">
-                            <MoreVertical className="w-4 h-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" className="bg-card border-border">
-                          <DropdownMenuItem onClick={() => {
-                            navigator.clipboard.writeText(withdrawal.address);
-                            toast.success("Address copied!");
-                          }}>
-                            <Eye className="w-4 h-4 mr-2" />
-                            Copy Address
-                          </DropdownMenuItem>
-                          {withdrawal.status === "Pending" && (
-                            <>
-                              <DropdownMenuItem onClick={() => handleStatusChange(withdrawal.id, "Completed")}>
-                                <CheckCircle className="w-4 h-4 mr-2 text-success" />
-                                Mark as Paid
-                              </DropdownMenuItem>
-                              <DropdownMenuItem onClick={() => handleStatusChange(withdrawal.id, "Rejected")}>
-                                <XCircle className="w-4 h-4 mr-2 text-destructive" />
-                                Reject
-                              </DropdownMenuItem>
-                            </>
-                          )}
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </td>
+            {filteredWithdrawals.length === 0 ? (
+              <p className="text-muted-foreground text-center py-8">No withdrawals found</p>
+            ) : (
+              <table className="w-full">
+                <thead>
+                  <tr className="table-header">
+                    <th className="text-left py-3 px-4 rounded-l-lg">User</th>
+                    <th className="text-left py-3 px-4">Amount</th>
+                    <th className="text-left py-3 px-4">Method</th>
+                    <th className="text-left py-3 px-4">Wallet Address</th>
+                    <th className="text-left py-3 px-4">Date</th>
+                    <th className="text-left py-3 px-4">Status</th>
+                    <th className="text-left py-3 px-4 rounded-r-lg">Actions</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {filteredWithdrawals.map((withdrawal) => (
+                    <tr key={withdrawal.id} className="table-row">
+                      <td className="py-4 px-4">
+                        <div>
+                          <p className="font-medium">{withdrawal.user_name}</p>
+                          <p className="text-sm text-muted-foreground">{withdrawal.user_email}</p>
+                        </div>
+                      </td>
+                      <td className="py-4 px-4 text-warning font-semibold">${Number(withdrawal.amount).toLocaleString()}</td>
+                      <td className="py-4 px-4">{withdrawal.payment_method}</td>
+                      <td className="py-4 px-4">
+                        <code className="text-xs bg-secondary px-2 py-1 rounded break-all max-w-[150px] block truncate">
+                          {withdrawal.wallet_address}
+                        </code>
+                      </td>
+                      <td className="py-4 px-4 text-muted-foreground text-sm">
+                        {withdrawal.created_at ? format(new Date(withdrawal.created_at), 'yyyy-MM-dd HH:mm') : 'N/A'}
+                      </td>
+                      <td className="py-4 px-4">
+                        <span className={`status-badge ${
+                          withdrawal.status === "approved" ? "status-active" :
+                          withdrawal.status === "pending" ? "status-pending" :
+                          "status-inactive"
+                        }`}>
+                          {withdrawal.status || 'pending'}
+                        </span>
+                      </td>
+                      <td className="py-4 px-4">
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="sm">
+                              <MoreVertical className="w-4 h-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" className="bg-card border-border">
+                            <DropdownMenuItem onClick={() => {
+                              navigator.clipboard.writeText(withdrawal.wallet_address);
+                              toast.success("Address copied!");
+                            }}>
+                              <Eye className="w-4 h-4 mr-2" />
+                              Copy Address
+                            </DropdownMenuItem>
+                            {withdrawal.status === "pending" && (
+                              <>
+                                <DropdownMenuItem onClick={() => handleStatusChange(withdrawal.id, "approved")}>
+                                  <CheckCircle className="w-4 h-4 mr-2 text-success" />
+                                  Mark as Paid
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => handleStatusChange(withdrawal.id, "rejected")}>
+                                  <XCircle className="w-4 h-4 mr-2 text-destructive" />
+                                  Reject
+                                </DropdownMenuItem>
+                              </>
+                            )}
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
           </div>
         </div>
       </div>

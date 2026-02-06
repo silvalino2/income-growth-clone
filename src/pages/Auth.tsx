@@ -4,10 +4,12 @@ import { ArrowLeft, Eye, EyeOff, CheckCircle, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
+import { useAuth } from "@/contexts/AuthContext";
 
 const Auth = () => {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
+  const { user, isAdmin, isLoading: authLoading, signIn, signUp } = useAuth();
   const [mode, setMode] = useState<"login" | "register">(
     searchParams.get("mode") === "register" ? "register" : "login"
   );
@@ -32,6 +34,17 @@ const Auth = () => {
     confirmPassword: ""
   });
 
+  // Redirect if already logged in
+  useEffect(() => {
+    if (!authLoading && user) {
+      if (isAdmin) {
+        navigate("/admin");
+      } else {
+        navigate("/dashboard");
+      }
+    }
+  }, [user, isAdmin, authLoading, navigate]);
+
   useEffect(() => {
     const modeParam = searchParams.get("mode");
     if (modeParam === "register") {
@@ -43,18 +56,19 @@ const Auth = () => {
     e.preventDefault();
     setIsLoading(true);
     
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 1000));
+    const { error } = await signIn(loginData.email, loginData.password);
     
-    // Demo login - check for admin
-    if (loginData.email === "admin@income-growth.com" && loginData.password === "admin123") {
-      toast.success("Welcome back, Admin!");
-      navigate("/admin");
-    } else if (loginData.email && loginData.password) {
-      toast.success("Login successful!");
-      navigate("/dashboard");
+    if (error) {
+      if (error.message.includes("Invalid login credentials")) {
+        toast.error("Invalid email or password");
+      } else if (error.message.includes("Email not confirmed")) {
+        toast.error("Please confirm your email address before logging in");
+      } else {
+        toast.error(error.message || "Login failed");
+      }
     } else {
-      toast.error("Invalid credentials");
+      toast.success("Login successful!");
+      // Navigation will be handled by the useEffect above
     }
     
     setIsLoading(false);
@@ -76,11 +90,28 @@ const Auth = () => {
       return;
     }
 
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 1000));
+    const fullName = `${registerData.firstName} ${registerData.lastName}`.trim();
     
-    toast.success("Registration successful! Please log in.");
-    setMode("login");
+    const { error } = await signUp(
+      registerData.email,
+      registerData.password,
+      fullName,
+      registerData.country,
+      registerData.phone
+    );
+    
+    if (error) {
+      if (error.message.includes("already registered")) {
+        toast.error("This email is already registered. Please log in.");
+      } else {
+        toast.error(error.message || "Registration failed");
+      }
+    } else {
+      toast.success("Registration successful! Please check your email to confirm your account.");
+      setMode("login");
+      setLoginData({ email: registerData.email, password: "" });
+    }
+    
     setIsLoading(false);
   };
 
@@ -89,6 +120,17 @@ const Auth = () => {
     "France", "Singapore", "Nigeria", "South Africa", "India", "China",
     "Japan", "Brazil", "Mexico", "Spain", "Italy", "Netherlands", "Sweden"
   ];
+
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+          <p className="text-muted-foreground">Loading...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background flex">

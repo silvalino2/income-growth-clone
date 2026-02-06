@@ -4,20 +4,20 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Wallet, ArrowDownCircle, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
-
-const withdrawalHistory = [
-  { id: 1, amount: "$250.00", method: "Bitcoin", address: "bc1q...fjhx", date: "2024-01-10", status: "Completed" },
-  { id: 2, amount: "$500.00", method: "USDT", address: "TXkV...vJT", date: "2024-01-15", status: "Pending" },
-];
+import { useUserStats, useUserWithdrawals } from "@/hooks/useUserData";
+import { format } from "date-fns";
 
 const Withdraw = () => {
+  const { stats } = useUserStats();
+  const { withdrawals, isLoading, createWithdrawal } = useUserWithdrawals();
   const [amount, setAmount] = useState("");
-  const [method, setMethod] = useState("btc");
+  const [method, setMethod] = useState("BTC");
   const [address, setAddress] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const availableBalance = 1430.00;
+  const availableBalance = stats.totalBalance;
 
-  const handleWithdraw = (e: React.FormEvent) => {
+  const handleWithdraw = async (e: React.FormEvent) => {
     e.preventDefault();
     
     const numAmount = parseFloat(amount);
@@ -34,10 +34,31 @@ const Withdraw = () => {
       return;
     }
 
-    toast.success("Withdrawal request submitted! Processing may take 24-48 hours.");
-    setAmount("");
-    setAddress("");
+    setIsSubmitting(true);
+    const result = await createWithdrawal(numAmount, address, method);
+    
+    if (result.success) {
+      toast.success("Withdrawal request submitted! Processing may take 24-48 hours.");
+      setAmount("");
+      setAddress("");
+    } else {
+      toast.error("Failed to submit withdrawal request");
+    }
+    setIsSubmitting(false);
   };
+
+  if (isLoading) {
+    return (
+      <DashboardLayout>
+        <div className="flex items-center justify-center h-64">
+          <div className="text-center">
+            <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+            <p className="text-muted-foreground">Loading...</p>
+          </div>
+        </div>
+      </DashboardLayout>
+    );
+  }
 
   return (
     <DashboardLayout>
@@ -82,9 +103,9 @@ const Withdraw = () => {
                   onChange={(e) => setMethod(e.target.value)}
                   className="input-dark w-full py-3 px-4 rounded-md bg-input border border-border"
                 >
-                  <option value="btc">Bitcoin (BTC)</option>
-                  <option value="eth">Ethereum (ETH)</option>
-                  <option value="usdt">USDT (TRC20)</option>
+                  <option value="BTC">Bitcoin (BTC)</option>
+                  <option value="ETH">Ethereum (ETH)</option>
+                  <option value="USDT">USDT (TRC20)</option>
                 </select>
               </div>
 
@@ -106,8 +127,12 @@ const Withdraw = () => {
                 </p>
               </div>
 
-              <Button type="submit" className="btn-hero w-full">
-                Request Withdrawal
+              <Button 
+                type="submit" 
+                className="btn-hero w-full"
+                disabled={isSubmitting || availableBalance < 50}
+              >
+                {isSubmitting ? "Submitting..." : "Request Withdrawal"}
               </Button>
             </form>
           </div>
@@ -116,28 +141,35 @@ const Withdraw = () => {
           <div className="dashboard-card">
             <h2 className="text-xl font-heading font-semibold mb-6">Withdrawal History</h2>
             <div className="space-y-4">
-              {withdrawalHistory.length === 0 ? (
+              {withdrawals.length === 0 ? (
                 <div className="text-center py-8 text-muted-foreground">
                   <ArrowDownCircle className="w-12 h-12 mx-auto mb-4 opacity-50" />
                   <p>No withdrawals yet</p>
                 </div>
               ) : (
-                withdrawalHistory.map((withdrawal) => (
+                withdrawals.map((withdrawal) => (
                   <div key={withdrawal.id} className="p-4 bg-secondary/30 rounded-lg">
                     <div className="flex items-center justify-between mb-2">
-                      <span className="text-xl font-heading font-bold">{withdrawal.amount}</span>
+                      <span className="text-xl font-heading font-bold">
+                        ${Number(withdrawal.amount).toLocaleString()}
+                      </span>
                       <span className={`status-badge ${
-                        withdrawal.status === "Completed" ? "status-active" : "status-pending"
+                        withdrawal.status === "approved" ? "status-active" : 
+                        withdrawal.status === "pending" ? "status-pending" :
+                        "status-inactive"
                       }`}>
-                        {withdrawal.status}
+                        {withdrawal.status === 'approved' ? 'Completed' : 
+                         withdrawal.status === 'pending' ? 'Pending' : 'Rejected'}
                       </span>
                     </div>
                     <div className="flex items-center justify-between text-sm text-muted-foreground">
-                      <span>{withdrawal.method}</span>
-                      <span>{withdrawal.date}</span>
+                      <span>{withdrawal.payment_method}</span>
+                      <span>
+                        {withdrawal.created_at ? format(new Date(withdrawal.created_at), 'yyyy-MM-dd') : 'N/A'}
+                      </span>
                     </div>
                     <p className="text-xs text-muted-foreground mt-1 truncate">
-                      {withdrawal.address}
+                      {withdrawal.wallet_address}
                     </p>
                   </div>
                 ))

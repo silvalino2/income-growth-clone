@@ -1,13 +1,16 @@
-import { useState } from "react";
 import AdminLayout from "@/components/admin/AdminLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
-import { Settings, Globe, Mail, Bell, Shield, Wallet, Save } from "lucide-react";
+import { Settings, Globe, Wallet, Save, Shield } from "lucide-react";
 import { toast } from "sonner";
+import { useState, useEffect } from "react";
+import { usePlatformSettings } from "@/hooks/useAdminData";
 
 const AdminSettings = () => {
+  const { settings: platformSettings, isLoading, updateSetting } = usePlatformSettings();
+  
   const [settings, setSettings] = useState({
     siteName: "INCOME-GROWTH.COM",
     siteEmail: "service@income-growth.com",
@@ -23,18 +26,61 @@ const AdminSettings = () => {
   });
 
   const [wallets, setWallets] = useState({
-    bitcoin: "bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh",
-    ethereum: "0x71C7656EC7ab88b098defB751B7401B5f6d8976F",
-    usdt: "TXkVbVBRvF5ZGH6hKMH3snZvZJUq8cNvJT",
+    bitcoin: "",
+    ethereum: "",
+    usdt: "",
   });
 
-  const handleSaveGeneral = () => {
+  useEffect(() => {
+    if (platformSettings) {
+      setWallets({
+        bitcoin: platformSettings.btc_wallet || "",
+        ethereum: platformSettings.eth_wallet || "",
+        usdt: platformSettings.usdt_wallet || "",
+      });
+      if (platformSettings.min_withdrawal) {
+        setSettings(s => ({ ...s, minWithdrawal: parseInt(platformSettings.min_withdrawal) }));
+      }
+      if (platformSettings.maintenance_mode) {
+        setSettings(s => ({ ...s, maintenanceMode: platformSettings.maintenance_mode === 'true' }));
+      }
+    }
+  }, [platformSettings]);
+
+  const handleSaveGeneral = async () => {
     toast.success("General settings saved successfully!");
   };
 
-  const handleSaveWallets = () => {
+  const handleSaveWallets = async () => {
+    await updateSetting('btc_wallet', wallets.bitcoin);
+    await updateSetting('eth_wallet', wallets.ethereum);
+    await updateSetting('usdt_wallet', wallets.usdt);
     toast.success("Wallet addresses updated successfully!");
   };
+
+  const handleSaveFinancial = async () => {
+    await updateSetting('min_withdrawal', settings.minWithdrawal.toString());
+    toast.success("Financial settings saved!");
+  };
+
+  const handleToggleMaintenance = async (checked: boolean) => {
+    setSettings({ ...settings, maintenanceMode: checked });
+    await updateSetting('maintenance_mode', checked.toString());
+    toast.success(checked ? "Maintenance mode enabled" : "Maintenance mode disabled");
+  };
+
+  if (isLoading) {
+    return (
+      <AdminLayout>
+        <div className="flex items-center justify-center h-64">
+          <div className="text-center">
+            <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+            <p className="text-muted-foreground">Loading settings...</p>
+          </div>
+        </div>
+      </AdminLayout>
+    );
+  }
 
   return (
     <AdminLayout>
@@ -175,7 +221,7 @@ const AdminSettings = () => {
                   className="input-dark"
                 />
               </div>
-              <Button onClick={() => toast.success("Financial settings saved!")} className="btn-hero w-full">
+              <Button onClick={handleSaveFinancial} className="btn-hero w-full">
                 <Save className="w-4 h-4 mr-2" />
                 Save Financial Settings
               </Button>
@@ -199,7 +245,7 @@ const AdminSettings = () => {
                 </div>
                 <Switch
                   checked={settings.maintenanceMode}
-                  onCheckedChange={(checked) => setSettings({...settings, maintenanceMode: checked})}
+                  onCheckedChange={handleToggleMaintenance}
                 />
               </div>
               <div className="flex items-center justify-between py-3 border-b border-border">
