@@ -38,7 +38,7 @@ const Stats = () => {
                 <Award className="w-8 h-8 text-primary" />
                 <div>
                   <p className="font-heading font-semibold">Company Name</p>
-                  <p className="text-muted-foreground text-sm">INCOME-GROWTH.COM</p>
+                  <p className="text-muted-foreground text-sm">INCOME-GROWTH.ORG</p>
                 </div>
               </div>
               <div className="flex items-center gap-4">
@@ -55,7 +55,7 @@ const Stats = () => {
           <div className="relative">
             <div className="rounded-2xl overflow-hidden border border-border shadow-2xl">
               <img 
-                src="https://income-growth.com/img/license.jpg"
+                src="https://income-growth.org/img/license.jpg"
                 alt="Financial Growths License"
                 className="w-full h-auto"
               />

@@ -39,6 +39,7 @@ const Header = () => {
                 <div className="w-1 h-3 bg-primary-foreground rounded-full" />
               </div>
             </div>
+            <span className="font-heading font-bold text-lg">INCOME-GROWTH</span>
           </Link>
 
           {/* Desktop Navigation */}

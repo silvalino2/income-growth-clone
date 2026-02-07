@@ -34,12 +34,12 @@ const Hero = () => {
 
       <div className="container mx-auto px-4 relative z-10 text-center pt-20">
         <p className="text-muted-foreground text-lg mb-4 animate-fade-in" style={{ animationDelay: "0.1s" }}>
-          Maximize Your Financial Success with INCOME-GROWTH.COM
+          Maximize Your Financial Success with INCOME-GROWTH.ORG
         </p>
         
         <h1 className="text-4xl md:text-5xl lg:text-6xl font-heading font-bold mb-8 animate-fade-in" style={{ animationDelay: "0.2s" }}>
           Begin Your Journey to Wealth<br />
-          with <span className="text-primary">INCOME-GROWTH.COM</span>
+          with <span className="text-primary">INCOME-GROWTH.ORG</span>
         </h1>
 
         <div className="flex flex-col sm:flex-row gap-4 justify-center animate-fade-in" style={{ animationDelay: "0.4s" }}>
