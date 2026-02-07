@@ -12,8 +12,8 @@ const AdminSettings = () => {
   const { settings: platformSettings, isLoading, updateSetting } = usePlatformSettings();
   
   const [settings, setSettings] = useState({
-    siteName: "INCOME-GROWTH.COM",
-    siteEmail: "service@income-growth.com",
+    siteName: "INCOME-GROWTH.ORG",
+    siteEmail: "service@income-growth.org",
     supportPhone: "+19545738063",
     address: "288/290 Torquay Rd, Paignton Devon",
     minWithdrawal: 50,

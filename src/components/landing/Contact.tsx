@@ -118,7 +118,7 @@ const Contact = () => {
               </a>
 
               <a 
-                href="mailto:service@income-growth.com"
+                href="mailto:service@income-growth.org"
                 className="card-dark flex items-center gap-4 hover:border-primary/50 transition-colors"
               >
                 <div className="w-12 h-12 bg-destructive/10 rounded-full flex items-center justify-center">
@@ -126,7 +126,7 @@ const Contact = () => {
                 </div>
                 <div>
                   <p className="text-muted-foreground text-sm">Email</p>
-                  <p className="font-medium">service@income-growth.com</p>
+                  <p className="font-medium">service@income-growth.org</p>
                 </div>
               </a>
 

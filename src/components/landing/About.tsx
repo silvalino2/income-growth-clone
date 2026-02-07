@@ -11,7 +11,7 @@ const features = [
   {
     icon: BarChart3,
     title: "Option Trading Opportunities",
-    description: "Dive into the exciting world of options trading with INCOME-GROWTH.COM. Enhance your portfolio with the power of options trading."
+    description: "Dive into the exciting world of options trading with INCOME-GROWTH.ORG. Enhance your portfolio with the power of options trading."
   },
   {
     icon: LineChart,
@@ -21,7 +21,7 @@ const features = [
   {
     icon: Bitcoin,
     title: "Crypto Asset Management",
-    description: "INCOME-GROWTH.COM Investment helps investors in steering their funds in high performing asset tokens across exchanges."
+    description: "INCOME-GROWTH.ORG Investment helps investors in steering their funds in high performing asset tokens across exchanges."
   }
 ];
 
@@ -37,7 +37,7 @@ const About = () => {
           <div className="relative">
             <div className="rounded-2xl overflow-hidden border border-border">
               <img 
-                src="https://income-growth.com/wp-content/uploads/2024/04/invest-in-crypto1-838x1024.jpg"
+                src="https://income-growth.org/wp-content/uploads/2024/04/invest-in-crypto1-838x1024.jpg"
                 alt="Investment Trading"
                 className="w-full h-auto object-cover"
               />
@@ -52,10 +52,10 @@ const About = () => {
             </h2>
             <div className="w-20 h-1 bg-primary mb-6" />
             <p className="text-muted-foreground mb-6 leading-relaxed">
-              Welcome to INCOME-GROWTH.COM, a leading financial trading firm dedicated to helping our clients achieve their financial goals. With a steadfast commitment to excellence, we utilize our deep market expertise and experience to offer top-tier strategic guidance and tailored investment solutions.
+              Welcome to INCOME-GROWTH.ORG, a leading financial trading firm dedicated to helping our clients achieve their financial goals. With a steadfast commitment to excellence, we utilize our deep market expertise and experience to offer top-tier strategic guidance and tailored investment solutions.
             </p>
             <p className="text-muted-foreground mb-8 leading-relaxed">
-              At INCOME-GROWTH.COM, we understand that every client has unique financial goals and needs. That's why our team of experienced professionals is committed to providing personalized strategies tailored to your specific situation.
+              At INCOME-GROWTH.ORG, we understand that every client has unique financial goals and needs. That's why our team of experienced professionals is committed to providing personalized strategies tailored to your specific situation.
             </p>
           </div>
         </div>

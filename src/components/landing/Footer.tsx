@@ -20,7 +20,7 @@ const Footer = () => {
 
           {/* Copyright */}
           <p className="text-muted-foreground text-sm">
-            © {new Date().getFullYear()} INCOME-GROWTH.COM. All rights reserved.
+            © {new Date().getFullYear()} INCOME-GROWTH.ORG. All rights reserved.
           </p>
 
           {/* CTA */}
