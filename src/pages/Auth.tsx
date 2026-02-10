@@ -144,7 +144,7 @@ const Auth = () => {
       </Link>
 
       {/* Login Section */}
-      <div className="w-full lg:w-1/2 flex items-center justify-center p-8">
+      <div className={`w-full lg:w-1/2 flex items-center justify-center p-8 ${mode === "register" ? "hidden lg:flex" : "flex"}`}>
         <div className="w-full max-w-md">
           <h1 className="text-4xl font-heading font-bold mb-8">Login</h1>
 
@@ -218,7 +218,7 @@ const Auth = () => {
       </div>
 
       {/* Register Section */}
-      <div className="hidden lg:flex w-1/2 items-center justify-center p-8 bg-card/50">
+      <div className={`w-full lg:w-1/2 items-center justify-center p-8 bg-card/50 ${mode === "register" ? "flex" : "hidden lg:flex"}`}>
         <div className="w-full max-w-lg">
           <h1 className="text-4xl font-heading font-bold mb-8">Register</h1>
 
