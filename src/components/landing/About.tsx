@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { TrendingUp, BarChart3, LineChart, Bitcoin } from "lucide-react";
+import aboutTradingImg from "@/assets/about-trading.jpg";
 
 const features = [
   {
@@ -37,7 +38,7 @@ const About = () => {
           <div className="relative">
             <div className="rounded-2xl overflow-hidden border border-border">
               <img 
-                src="https://income-growth.org/wp-content/uploads/2024/04/invest-in-crypto1-838x1024.jpg"
+                src={aboutTradingImg}
                 alt="Investment Trading"
                 className="w-full h-auto object-cover"
               />
