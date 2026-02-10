@@ -1,28 +1,33 @@
 import { ArrowRight } from "lucide-react";
+import forexImg from "@/assets/forex.png";
+import stockImg from "@/assets/stock-exchange.png";
+import cryptoImg from "@/assets/cryptocurrency.png";
+import realEstateImg from "@/assets/real-estate.png";
+import commoditiesImg from "@/assets/commodities.png";
 
 const services = [
   {
-    image: "https://income-growth.org/wp-content/uploads/2024/06/forex.png",
+    image: forexImg,
     title: "Forex Investment Services",
     description: "Investing in the forex market can be highly rewarding, but it requires the right partner to navigate its complexities. Join us today and take the first step towards a prosperous future in forex trading."
   },
   {
-    image: "https://income-growth.org/wp-content/uploads/2024/06/stock-exchange.png",
+    image: stockImg,
     title: "Stock Investment Services",
     description: "Our company provides a comprehensive global stock investment package that combines expertise, advanced tools, personalized strategies, and exceptional support."
   },
   {
-    image: "https://income-growth.org/wp-content/uploads/2024/06/cryptocurrency.png",
+    image: cryptoImg,
     title: "Digital Currency",
     description: "INCOME-GROWTH.ORG has a proven track record of success in the USDT market. Our history of success is a testament to our expertise, dedication, and the effectiveness of our USDT package."
   },
   {
-    image: "https://income-growth.org/wp-content/uploads/2024/06/contract.png",
+    image: realEstateImg,
     title: "Real Estate Investments",
     description: "At INCOME-GROWTH.ORG, we are committed to providing a comprehensive real estate investment package that opens doors to lucrative opportunities, particularly in the robust markets of the USA and Canada."
   },
   {
-    image: "https://income-growth.org/wp-content/uploads/2024/06/commodities.png",
+    image: commoditiesImg,
     title: "Commodities Trading Services",
     description: "Commodities, such as gold, oil, and agricultural products, tend to increase in value during inflationary periods. Our commodities package is designed to help you protect your wealth in times of rising prices."
   }

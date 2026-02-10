@@ -1,4 +1,5 @@
 import { Shield, Award, Building } from "lucide-react";
+import licenseImg from "@/assets/license.jpg";
 
 const Stats = () => {
   return (
@@ -55,7 +56,7 @@ const Stats = () => {
           <div className="relative">
             <div className="rounded-2xl overflow-hidden border border-border shadow-2xl">
               <img 
-                src="https://income-growth.org/img/license.jpg"
+                src={licenseImg}
                 alt="Financial Growths License"
                 className="w-full h-auto"
               />
