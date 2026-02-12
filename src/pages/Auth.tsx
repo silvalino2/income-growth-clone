@@ -59,13 +59,9 @@ const Auth = () => {
     const { error } = await signIn(loginData.email, loginData.password);
     
     if (error) {
-      if (error.message.includes("Invalid login credentials")) {
-        toast.error("Invalid email or password");
-      } else if (error.message.includes("Email not confirmed")) {
-        toast.error("Please confirm your email address before logging in");
-      } else {
-        toast.error(error.message || "Login failed");
-      }
+      console.log("REAL ERROR:", error);
+      alert(error.message);
+      toast.error(error.message || "Login failed");
     } else {
       toast.success("Login successful!");
       // Navigation will be handled by the useEffect above
