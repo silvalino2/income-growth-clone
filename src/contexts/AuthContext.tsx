@@ -37,6 +37,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isAdmin, setIsAdmin] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
+  // ✅ CHECK ADMIN ROLE (FIXED & CLEAN)
+  const checkAdminRole = async (userId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('user_id', userId)
+        .single();
+
+      if (error || !data) {
+        console.error('Error checking admin role:', error);
+        setIsAdmin(false);
+        return;
+      }
+
+      console.log('User role:', data.role);
+
+      setIsAdmin(data.role?.toLowerCase() === 'admin');
+    } catch (err) {
+      console.error('Error checking admin role:', err);
+      setIsAdmin(false);
+    }
+  };
+
   const fetchProfile = async (userId: string) => {
     try {
       const { data, error } = await supabase
@@ -51,72 +75,47 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       setProfile(data);
-    } catch (error) {
-      console.error('Error fetching profile:', error);
+    } catch (err) {
+      console.error('Error fetching profile:', err);
     }
   };
-
-
 
   const refreshProfile = async () => {
     if (user) {
       await fetchProfile(user.id);
+      await checkAdminRole(user.id);
     }
   };
 
   useEffect(() => {
-    // Set up auth state listener FIRST
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (event, session) => {
-        setSession(session);
-        setUser(session?.user ?? null);
-        
-        // Defer Supabase calls with setTimeout
-        if (session?.user) {
-          setTimeout(() => {
-            fetchProfile(session.user.id);
-            checkAdminRole(session.user.id);
-          }, 0);
-        } else {
-          setProfile(null);
-          setIsAdmiconst checkAdminRole = async (userId: string) => {
-  try {
-    const { data, error } = await supabase
-      .from('profiles')
-      .select('role')
-      .eq('user_id', userId)
-      .single();
+    // Listen for auth changes
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((event, session) => {
+      setSession(session);
+      setUser(session?.user ?? null);
 
-    if (error || !data) {
-      console.error('Error checking admin role:', error);
-      setIsAdmin(false);
-      return;
-    }
-
-    console.log("User role:", data.role);
-
-    setIsAdmin(data.role?.toLowerCase() === 'admin');
-  } catch (error) {
-    console.error('Error checking admin role:', error);
-    setIsAdmin(false);
-  }
-};n(false);
-        }
-        
-        setIsLoading(false);
+      if (session?.user) {
+        fetchProfile(session.user.id);
+        checkAdminRole(session.user.id);
+      } else {
+        setProfile(null);
+        setIsAdmin(false);
       }
-    );
 
-    // THEN check for existing session
+      setIsLoading(false);
+    });
+
+    // Check existing session on load
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       setUser(session?.user ?? null);
-      
+
       if (session?.user) {
         fetchProfile(session.user.id);
         checkAdminRole(session.user.id);
       }
-      
+
       setIsLoading(false);
     });
 
@@ -124,39 +123,37 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const signIn = async (email: string, password: string) => {
-    try {
-      const { error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
-      
-      return { error: error as Error | null };
-    } catch (error) {
-      return { error: error as Error };
-    }
+    const { error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
+
+    return { error: error as Error | null };
   };
 
-  const signUp = async (email: string, password: string, fullName: string, country?: string, phone?: string) => {
-    try {
-      const redirectUrl = `${window.location.origin}/`;
-      
-      const { error } = await supabase.auth.signUp({
-        email,
-        password,
-        options: {
-          emailRedirectTo: redirectUrl,
-          data: {
-            full_name: fullName,
-            country,
-            phone,
-          },
+  const signUp = async (
+    email: string,
+    password: string,
+    fullName: string,
+    country?: string,
+    phone?: string
+  ) => {
+    const redirectUrl = `${window.location.origin}/`;
+
+    const { error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        emailRedirectTo: redirectUrl,
+        data: {
+          full_name: fullName,
+          country,
+          phone,
         },
-      });
-      
-      return { error: error as Error | null };
-    } catch (error) {
-      return { error: error as Error };
-    }
+      },
+    });
+
+    return { error: error as Error | null };
   };
 
   const signOut = async () => {
@@ -168,26 +165,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{
-      user,
-      session,
-      profile,
-      isAdmin,
-      isLoading,
-      signIn,
-      signUp,
-      signOut,
-      refreshProfile,
-    }}>
+    <AuthContext.Provider
+      value={{
+        user,
+        session,
+        profile,
+        isAdmin,
+        isLoading,
+        signIn,
+        signUp,
+        signOut,
+        refreshProfile,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );
-}
-
-export function useAuth() {
-  const context = useContext(AuthContext);
-  if (context === undefined) {
-    throw new Error('useAuth must be used within an AuthProvider');
-  }
-  return context;
 }
