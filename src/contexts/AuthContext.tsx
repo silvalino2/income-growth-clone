@@ -56,26 +56,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const checkAdminRole = async (userId: string) => {
-  try {
-    const { data, error } = await supabase
-      .from('profiles')
-      .select('role')
-      .eq('user_id', userId)
-      .single();
 
-    if (error) {
-      console.error('Error checking admin role:', error);
-      setIsAdmin(false);
-      return;
-    }
-
-    setIsAdmin(data?.role === 'admin');
-  } catch (error) {
-    console.error('Error checking admin role:', error);
-    setIsAdmin(false);
-  }
-};
 
   const refreshProfile = async () => {
     if (user) {
@@ -98,7 +79,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           }, 0);
         } else {
           setProfile(null);
-          setIsAdmin(false);
+          setIsAdmiconst checkAdminRole = async (userId: string) => {
+  try {
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('role')
+      .eq('user_id', userId)
+      .single();
+
+    if (error || !data) {
+      console.error('Error checking admin role:', error);
+      setIsAdmin(false);
+      return;
+    }
+
+    console.log("User role:", data.role);
+
+    setIsAdmin(data.role?.toLowerCase() === 'admin');
+  } catch (error) {
+    console.error('Error checking admin role:', error);
+    setIsAdmin(false);
+  }
+};n(false);
         }
         
         setIsLoading(false);
