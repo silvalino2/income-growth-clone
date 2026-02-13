@@ -57,26 +57,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const checkAdminRole = async (userId: string) => {
-    try {
-      const { data, error } = await supabase
-        .from('user_roles')
-        .select('role')
-        .eq('user_id', userId)
-        .eq('role', 'admin')
-        .maybeSingle();
+  try {
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('role')
+      .eq('user_id', userId)
+      .single();
 
-      if (error) {
-        console.error('Error checking admin role:', error);
-        setIsAdmin(false);
-        return;
-      }
-
-      setIsAdmin(!!data);
-    } catch (error) {
+    if (error) {
       console.error('Error checking admin role:', error);
       setIsAdmin(false);
+      return;
     }
-  };
+
+    setIsAdmin(data?.role === 'admin');
+  } catch (error) {
+    console.error('Error checking admin role:', error);
+    setIsAdmin(false);
+  }
+};
 
   const refreshProfile = async () => {
     if (user) {
