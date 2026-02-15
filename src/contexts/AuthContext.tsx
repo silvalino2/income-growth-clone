@@ -44,7 +44,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isAdmin, setIsAdmin] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
-  const checkAdminRole = async (userId: string) => {
+  // ✅ Check Admin Role
+  const checkAdminRole = async (userId: string): Promise<void> => {
     try {
       const { data, error } = await supabase
         .from('profiles')
@@ -58,12 +59,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       setIsAdmin(data.role?.toLowerCase() === 'admin');
-    } catch {
+    } catch (err) {
+      console.error('Admin role check failed:', err);
       setIsAdmin(false);
     }
   };
 
-  const fetchProfile = async (userId: string) => {
+  // ✅ Fetch Profile
+  const fetchProfile = async (userId: string): Promise<void> => {
     try {
       const { data, error } = await supabase
         .from('profiles')
@@ -71,13 +74,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         .eq('user_id', userId)
         .maybeSingle();
 
-      if (!error) {
+      if (!error && data) {
         setProfile(data);
+      } else {
+        setProfile(null);
       }
-    } catch {}
+    } catch (err) {
+      console.error('Profile fetch failed:', err);
+      setProfile(null);
+    }
   };
 
-  const refreshProfile = async () => {
+  const refreshProfile = async (): Promise<void> => {
     if (user) {
       await fetchProfile(user.id);
       await checkAdminRole(user.id);
@@ -87,7 +95,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((event, session) => {
+    } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
       setUser(session?.user ?? null);
 
@@ -151,7 +159,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return { error: error as Error | null };
   };
 
-  const signOut = async () => {
+  const signOut = async (): Promise<void> => {
     await supabase.auth.signOut();
     setUser(null);
     setSession(null);
@@ -178,86 +186,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 }
 
-export function useAuth() {
+export function useAuth(): AuthContextType {
   const context = useContext(AuthContext);
   if (!context) {
     throw new Error('useAuth must be used within an AuthProvider');
   }
   return context;
-}
-    // Check existing session on load
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-
-      if (session?.user) {
-        fetchProfile(session.user.id);
-        checkAdminRole(session.user.id);
-      }
-
-      setIsLoading(false);
-    });
-
-    return () => subscription.unsubscribe();
-  }, []);
-
-  const signIn = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
-
-    return { error: error as Error | null };
-  };
-
-  const signUp = async (
-    email: string,
-    password: string,
-    fullName: string,
-    country?: string,
-    phone?: string
-  ) => {
-    const redirectUrl = `${window.location.origin}/`;
-
-    const { error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        emailRedirectTo: redirectUrl,
-        data: {
-          full_name: fullName,
-          country,
-          phone,
-        },
-      },
-    });
-
-    return { error: error as Error | null };
-  };
-
-  const signOut = async () => {
-    await supabase.auth.signOut();
-    setUser(null);
-    setSession(null);
-    setProfile(null);
-    setIsAdmin(false);
-  };
-
-  return (
-    <AuthContext.Provider
-      value={{
-        user,
-        session,
-        profile,
-        isAdmin,
-        isLoading,
-        signIn,
-        signUp,
-        signOut,
-        refreshProfile,
-      }}
-    >
-      {children}
-    </AuthContext.Provider>
-  );
-}
+  }
