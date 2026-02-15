@@ -2,20 +2,7 @@ import { createContext, useContext, useEffect, useState, ReactNode } from 'react
 import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
 
-interface Profile {
-  id: string;
-  user_id: string;
-  full_name: string | null;
-  email: string;
-  phone: string | null;
-  country: string | null;
-  avatar_url: string | null;
-  balance: number;
-  referral_code: string;
-  status: string;
-  created_at: string;
-}
-
+interface Profile {  id: string;  user_id: string;  full_name: string | null;  email: string;  phone: string | null;  country: string | null;  avatar_url: string | null;  balance: number;  referral_code: string;  status: string;  role: string; // 👈 ADD THIS  created_at: string;}
 interface AuthContextType {
   user: User | null;
   session: Session | null;
