@@ -13,7 +13,7 @@ interface Profile {
   balance: number;
   referral_code: string;
   status: string;
-  role: string; // 👈 ADD THIS
+  role?: string;
   created_at: string;
 }
 
@@ -24,7 +24,13 @@ interface AuthContextType {
   isAdmin: boolean;
   isLoading: boolean;
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
-  signUp: (email: string, password: string, fullName: string, country?: string, phone?: string) => Promise<{ error: Error | null }>;
+  signUp: (
+    email: string,
+    password: string,
+    fullName: string,
+    country?: string,
+    phone?: string
+  ) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
 }
@@ -38,7 +44,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isAdmin, setIsAdmin] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
-  // ✅ CHECK ADMIN ROLE (FIXED & CLEAN)
   const checkAdminRole = async (userId: string) => {
     try {
       const { data, error } = await supabase
@@ -48,16 +53,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         .single();
 
       if (error || !data) {
-        console.error('Error checking admin role:', error);
         setIsAdmin(false);
         return;
       }
 
-      console.log('User role:', data.role);
-
       setIsAdmin(data.role?.toLowerCase() === 'admin');
-    } catch (err) {
-      console.error('Error checking admin role:', err);
+    } catch {
       setIsAdmin(false);
     }
   };
@@ -70,15 +71,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         .eq('user_id', userId)
         .maybeSingle();
 
-      if (error) {
-        console.error('Error fetching profile:', error);
-        return;
+      if (!error) {
+        setProfile(data);
       }
-
-      setProfile(data);
-    } catch (err) {
-      console.error('Error fetching profile:', err);
-    }
+    } catch {}
   };
 
   const refreshProfile = async () => {
@@ -89,7 +85,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   useEffect(() => {
-    // Listen for auth changes
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((event, session) => {
@@ -107,6 +102,89 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setIsLoading(false);
     });
 
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+      setUser(session?.user ?? null);
+
+      if (session?.user) {
+        fetchProfile(session.user.id);
+        checkAdminRole(session.user.id);
+      }
+
+      setIsLoading(false);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  const signIn = async (email: string, password: string) => {
+    const { error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
+
+    return { error: error as Error | null };
+  };
+
+  const signUp = async (
+    email: string,
+    password: string,
+    fullName: string,
+    country?: string,
+    phone?: string
+  ) => {
+    const redirectUrl = `${window.location.origin}/`;
+
+    const { error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        emailRedirectTo: redirectUrl,
+        data: {
+          full_name: fullName,
+          country,
+          phone,
+        },
+      },
+    });
+
+    return { error: error as Error | null };
+  };
+
+  const signOut = async () => {
+    await supabase.auth.signOut();
+    setUser(null);
+    setSession(null);
+    setProfile(null);
+    setIsAdmin(false);
+  };
+
+  return (
+    <AuthContext.Provider
+      value={{
+        user,
+        session,
+        profile,
+        isAdmin,
+        isLoading,
+        signIn,
+        signUp,
+        signOut,
+        refreshProfile,
+      }}
+    >
+      {children}
+    </AuthContext.Provider>
+  );
+}
+
+export function useAuth() {
+  const context = useContext(AuthContext);
+  if (!context) {
+    throw new Error('useAuth must be used within an AuthProvider');
+  }
+  return context;
+}
     // Check existing session on load
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
