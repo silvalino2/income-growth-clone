@@ -2,20 +2,8 @@ import { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import AdminLayout from "@/components/admin/AdminLayout";
 import { useAuth } from "@/contexts/AuthContext";
-import {
-  Users,
-  ArrowUpCircle,
-  ArrowDownCircle,
-  TrendingUp,
-  DollarSign,
-  UserPlus,
-  Activity,
-} from "lucide-react";
-import {
-  useAdminStats,
-  useAdminDeposits,
-  useAdminUsers,
-} from "@/hooks/useAdminData";
+import { Users, ArrowUpCircle, ArrowDownCircle, TrendingUp, DollarSign, UserPlus, Activity } from "lucide-react";
+import { useAdminStats, useAdminDeposits, useAdminUsers } from "@/hooks/useAdminData";
 import { format } from "date-fns";
 
 const AdminDashboard = () => {
@@ -23,50 +11,26 @@ const AdminDashboard = () => {
   const navigate = useNavigate();
 
   const { stats, isLoading: statsLoading } = useAdminStats();
-  const { users = [], isLoading: usersLoading } = useAdminUsers();
-  const { deposits = [], isLoading: depositsLoading } = useAdminDeposits();
+  const { users, isLoading: usersLoading } = useAdminUsers();
+  const { deposits, isLoading: depositsLoading } = useAdminDeposits();
 
-  // ✅ SAFE Admin Protection (No Loop)
+  // 🔒 Admin protection
   useEffect(() => {
-    if (!authReady) return; // Wait for auth to finish
-
-    if (!user) {
-      navigate("/login", { replace: true });
-      return;
-    }
-
-    if (!isAdmin) {
-      navigate("/dashboard", { replace: true });
-      return;
-    }
+    if (!authReady) return;
+    if (!user) navigate("/auth");
+    else if (!isAdmin) navigate("/dashboard");
   }, [user, isAdmin, authReady, navigate]);
 
-  // ✅ Always show something (no return null)
-  if (!authReady) {
-    return (
-      <AdminLayout>
-        <div className="flex items-center justify-center h-64">
-          <p>Checking authentication...</p>
-        </div>
-      </AdminLayout>
-    );
-  }
-
-  if (!user || !isAdmin) {
-    return (
-      <AdminLayout>
-        <div className="flex items-center justify-center h-64">
-          <p>Redirecting...</p>
-        </div>
-      </AdminLayout>
-    );
-  }
+  if (!authReady) return null; // wait until auth context is ready
 
   if (statsLoading || usersLoading || depositsLoading) {
     return (
       <AdminLayout>
         <div className="flex items-center justify-center h-64">
-          <p>Loading dashboard...</p>
+          <div className="text-center">
+            <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+            <p className="text-muted-foreground">Loading dashboard...</p>
+          </div>
         </div>
       </AdminLayout>
     );
@@ -75,105 +39,87 @@ const AdminDashboard = () => {
   const recentUsers = users.slice(0, 5);
   const recentDeposits = deposits.slice(0, 4);
 
-  const statsData = [
-    {
-      label: "Total Users",
-      value: stats?.totalUsers?.toLocaleString() || "0",
-      icon: Users,
-    },
-    {
-      label: "Active Deposits",
-      value: `$${stats?.activeDeposits?.toLocaleString() || 0}`,
-      icon: ArrowUpCircle,
-    },
-    {
-      label: "Total Withdrawals",
-      value: `$${stats?.totalWithdrawals?.toLocaleString() || 0}`,
-      icon: ArrowDownCircle,
-    },
-    {
-      label: "Platform Revenue",
-      value: `$${stats?.platformRevenue?.toLocaleString() || 0}`,
-      icon: DollarSign,
-    },
-  ];
-
   return (
     <AdminLayout>
       <div className="space-y-8">
+        <h1 className="text-3xl font-bold">Admin Dashboard</h1>
 
-        <div>
-          <h1 className="text-3xl font-bold mb-2">
-            Admin Dashboard
-          </h1>
-          <p className="text-muted-foreground">
-            Overview of platform activity.
-          </p>
-        </div>
-
-        {/* Stats */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-          {statsData.map((stat) => (
-            <div key={stat.label} className="dashboard-card p-4">
-              <div className="flex items-center gap-4">
-                <stat.icon className="w-6 h-6" />
-                <div>
-                  <p className="text-sm text-muted-foreground">
-                    {stat.label}
-                  </p>
-                  <p className="text-xl font-bold">
-                    {stat.value}
-                  </p>
-                </div>
-              </div>
-            </div>
-          ))}
+          <div className="dashboard-card">
+            <p>Total Users</p>
+            <p>{stats.totalUsers}</p>
+          </div>
+          <div className="dashboard-card">
+            <p>Active Deposits</p>
+            <p>${stats.activeDeposits}</p>
+          </div>
+          <div className="dashboard-card">
+            <p>Total Withdrawals</p>
+            <p>${stats.totalWithdrawals}</p>
+          </div>
+          <div className="dashboard-card">
+            <p>Platform Revenue</p>
+            <p>${stats.platformRevenue}</p>
+          </div>
         </div>
 
-        {/* Recent Users */}
-        <div className="dashboard-card p-4">
-          <h2 className="text-lg font-semibold mb-4">
-            Recent Users
-          </h2>
-
+        {/* Recent Users Table */}
+        <div className="dashboard-card">
+          <h2>Recent Users</h2>
           {recentUsers.length === 0 ? (
             <p>No users yet</p>
           ) : (
-            <div className="space-y-2">
-              {recentUsers.map((u) => (
-                <div key={u.id} className="flex justify-between">
-                  <span>{u.full_name || "Unknown"}</span>
-                  <span>
-                    {u.created_at
-                      ? format(new Date(u.created_at), "yyyy-MM-dd")
-                      : "N/A"}
-                  </span>
-                </div>
-              ))}
-            </div>
+            <table className="w-full">
+              <thead>
+                <tr>
+                  <th>User</th>
+                  <th>Email</th>
+                  <th>Joined</th>
+                  <th>Balance</th>
+                </tr>
+              </thead>
+              <tbody>
+                {recentUsers.map(u => (
+                  <tr key={u.id}>
+                    <td>{u.full_name || "Unknown"}</td>
+                    <td>{u.email}</td>
+                    <td>{u.created_at ? format(new Date(u.created_at), "yyyy-MM-dd") : "N/A"}</td>
+                    <td>${Number(u.balance || 0)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           )}
         </div>
 
-        {/* Recent Deposits */}
-        <div className="dashboard-card p-4">
-          <h2 className="text-lg font-semibold mb-4">
-            Recent Deposits
-          </h2>
-
+        {/* Recent Deposits Table */}
+        <div className="dashboard-card">
+          <h2>Recent Deposits</h2>
           {recentDeposits.length === 0 ? (
             <p>No deposits yet</p>
           ) : (
-            <div className="space-y-2">
-              {recentDeposits.map((d) => (
-                <div key={d.id} className="flex justify-between">
-                  <span>{d.user_name}</span>
-                  <span>${Number(d.amount).toLocaleString()}</span>
-                </div>
-              ))}
-            </div>
+            <table className="w-full">
+              <thead>
+                <tr>
+                  <th>User</th>
+                  <th>Amount</th>
+                  <th>Plan</th>
+                  <th>Date</th>
+                </tr>
+              </thead>
+              <tbody>
+                {recentDeposits.map(d => (
+                  <tr key={d.id}>
+                    <td>{d.user_name}</td>
+                    <td>${Number(d.amount)}</td>
+                    <td>{d.plan_name}</td>
+                    <td>{d.created_at ? format(new Date(d.created_at), "yyyy-MM-dd") : "N/A"}</td>
+                  </tr>
+                ))}
+              </tbody>
+              </table>
           )}
         </div>
-
       </div>
     </AdminLayout>
   );
