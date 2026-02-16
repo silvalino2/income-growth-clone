@@ -43,7 +43,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isAdmin, setIsAdmin] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
-  // ✅ Fetch profile
+  // Fetch the user's profile
   const fetchProfile = async (userId: string) => {
     try {
       const { data, error } = await supabase
@@ -58,35 +58,38 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return;
       }
 
-      setProfile(data || null);
+      setProfile(data);
     } catch (err) {
-      console.error('Error fetching profile:', err);
+      console.error('Exception fetching profile:', err);
       setProfile(null);
     }
   };
 
-  // ✅ Check admin role (supports multiple roles)
+  // Check if the user is admin (RLS safe)
   const checkAdminRole = async (userId: string) => {
     try {
       const { data, error } = await supabase
         .from('user_roles')
         .select('role')
-        .eq('user_id', userId);
+        .eq('user_id', userId)
+        .single(); // single row per user
 
       if (error || !data) {
-        console.error('Error fetching roles:', error);
+        console.log('Admin check: no role returned, defaulting to user', error);
         setIsAdmin(false);
         return;
       }
 
-      const hasAdmin = data.some((r: { role: string }) => r.role?.toLowerCase() === 'admin');
-      setIsAdmin(hasAdmin);
+      const adminStatus = data.role?.toLowerCase() === 'admin';
+      console.log('Admin check:', data.role, '-> isAdmin:', adminStatus);
+      setIsAdmin(adminStatus);
     } catch (err) {
-      console.error('Error checking admin role:', err);
+      console.error('Exception checking admin role:', err);
       setIsAdmin(false);
     }
   };
 
+  // Refresh profile and admin status
   const refreshProfile = async () => {
     if (user) {
       await fetchProfile(user.id);
@@ -94,11 +97,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  // ✅ Listen for auth state changes
+  // Listen to auth state changes
   useEffect(() => {
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((event, session) => {
+    } = supabase.auth.onAuthStateChange((_, session) => {
       setSession(session);
       setUser(session?.user ?? null);
 
@@ -107,6 +110,88 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         checkAdminRole(session.user.id);
       } else {
         setProfile(null);
+        setIsAdmin(false);
+      }
+
+      setIsLoading(false);
+    });
+
+    // On load, check existing session
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+      setUser(session?.user ?? null);
+
+      if (session?.user) {
+        fetchProfile(session.user.id);
+        checkAdminRole(session.user.id);
+      }
+
+      setIsLoading(false);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  const signIn = async (email: string, password: string) => {
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    return { error: error as Error | null };
+  };
+
+  const signUp = async (
+    email: string,
+    password: string,
+    fullName: string,
+    country?: string,
+    phone?: string
+  ) => {
+    const redirectUrl = `${window.location.origin}/`;
+
+    const { error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        emailRedirectTo: redirectUrl,
+        data: { full_name: fullName, country, phone },
+      },
+    });
+
+    return { error: error as Error | null };
+  };
+
+  const signOut = async () => {
+    await supabase.auth.signOut();
+    setUser(null);
+    setSession(null);
+    setProfile(null);
+    setIsAdmin(false);
+  };
+
+  return (
+    <AuthContext.Provider
+      value={{
+        user,
+        session,
+        profile,
+        isAdmin,
+        isLoading,
+        signIn,
+        signUp,
+        signOut,
+        refreshProfile,
+      }}
+    >
+      {children}
+    </AuthContext.Provider>
+  );
+}
+
+export function useAuth() {
+  const context = useContext(AuthContext);
+  if (!context) {
+    throw new Error('useAuth must be used within an AuthProvider');
+  }
+  return context;
+}        setProfile(null);
         setIsAdmin(false);
       }
 
