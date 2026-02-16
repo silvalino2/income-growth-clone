@@ -13,7 +13,6 @@ interface Profile {
   balance: number;
   referral_code: string;
   status: string;
-  role?: string;
   created_at: string;
 }
 
@@ -44,29 +43,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isAdmin, setIsAdmin] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
-  // ✅ Check Admin Role
-  const checkAdminRole = async (userId: string): Promise<void> => {
-    try {
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('role')
-        .eq('user_id', userId)
-        .single();
-
-      if (error || !data) {
-        setIsAdmin(false);
-        return;
-      }
-
-      setIsAdmin(data.role?.toLowerCase() === 'admin');
-    } catch (err) {
-      console.error('Admin role check failed:', err);
-      setIsAdmin(false);
-    }
-  };
-
-  // ✅ Fetch Profile
-  const fetchProfile = async (userId: string): Promise<void> => {
+  // ✅ Fetch profile
+  const fetchProfile = async (userId: string) => {
     try {
       const { data, error } = await supabase
         .from('profiles')
@@ -74,28 +52,53 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         .eq('user_id', userId)
         .maybeSingle();
 
-      if (!error && data) {
-        setProfile(data);
-      } else {
+      if (error) {
+        console.error('Error fetching profile:', error);
         setProfile(null);
+        return;
       }
+
+      setProfile(data || null);
     } catch (err) {
-      console.error('Profile fetch failed:', err);
+      console.error('Error fetching profile:', err);
       setProfile(null);
     }
   };
 
-  const refreshProfile = async (): Promise<void> => {
+  // ✅ Check admin role (supports multiple roles)
+  const checkAdminRole = async (userId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('user_roles')
+        .select('role')
+        .eq('user_id', userId);
+
+      if (error || !data) {
+        console.error('Error fetching roles:', error);
+        setIsAdmin(false);
+        return;
+      }
+
+      const hasAdmin = data.some((r: { role: string }) => r.role?.toLowerCase() === 'admin');
+      setIsAdmin(hasAdmin);
+    } catch (err) {
+      console.error('Error checking admin role:', err);
+      setIsAdmin(false);
+    }
+  };
+
+  const refreshProfile = async () => {
     if (user) {
       await fetchProfile(user.id);
       await checkAdminRole(user.id);
     }
   };
 
+  // ✅ Listen for auth state changes
   useEffect(() => {
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
+    } = supabase.auth.onAuthStateChange((event, session) => {
       setSession(session);
       setUser(session?.user ?? null);
 
@@ -110,6 +113,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setIsLoading(false);
     });
 
+    // Initial session check
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       setUser(session?.user ?? null);
@@ -125,12 +129,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => subscription.unsubscribe();
   }, []);
 
+  // ✅ Auth actions
   const signIn = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
-
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
     return { error: error as Error | null };
   };
 
@@ -159,7 +160,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return { error: error as Error | null };
   };
 
-  const signOut = async (): Promise<void> => {
+  const signOut = async () => {
     await supabase.auth.signOut();
     setUser(null);
     setSession(null);
@@ -186,10 +187,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 }
 
-export function useAuth(): AuthContextType {
+export function useAuth() {
   const context = useContext(AuthContext);
   if (!context) {
     throw new Error('useAuth must be used within an AuthProvider');
   }
   return context;
-  }
+}
