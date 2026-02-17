@@ -75,12 +75,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         .from("user_roles")
         .select("role")
         .eq("user_id", userId)
-        .single();
+        .maybeSingle();
 
-      if (error || !data) {
-        setIsAdmin(false);
-        return;
-      }
+      if (error) {
+      console.error("Admin role error:", error);
+      setIsAdmin(false);
+      return;
+    }
+
+    if (!data) {
+      setIsAdmin(false);
+      return;
+    }
 
       setIsAdmin(data.role?.toLowerCase() === "admin");
     } catch (err) {
