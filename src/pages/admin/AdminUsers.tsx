@@ -1,12 +1,12 @@
 import AdminLayout from "@/components/admin/AdminLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { 
-  Search, 
-  MoreVertical, 
-  Eye, 
-  Ban, 
-  CheckCircle, 
+import {
+  Search,
+  MoreVertical,
+  Eye,
+  Ban,
+  CheckCircle,
   Trash2,
   Mail,
   UserPlus
@@ -21,16 +21,28 @@ import { toast } from "sonner";
 import { useState } from "react";
 import { useAdminUsers } from "@/hooks/useAdminData";
 import { format } from "date-fns";
+import { supabase } from "@/integrations/supabase/client";
 
 const AdminUsers = () => {
   const { users, userDeposits, userWithdrawals, isLoading, updateUserStatus, refetch } = useAdminUsers();
+
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
 
+  // 🔥 NEW STATES
+  const [selectedUser, setSelectedUser] = useState<any>(null);
+  const [editBalance, setEditBalance] = useState(0);
+  const [editReferral, setEditReferral] = useState(0);
+
   const filteredUsers = users.filter(user => {
-    const matchesSearch = (user.full_name?.toLowerCase() || '').includes(searchQuery.toLowerCase()) ||
-                         user.email.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesStatus = statusFilter === "all" || (user.status || 'active').toLowerCase() === statusFilter;
+    const matchesSearch =
+      (user.full_name?.toLowerCase() || '').includes(searchQuery.toLowerCase()) ||
+      user.email.toLowerCase().includes(searchQuery.toLowerCase());
+
+    const matchesStatus =
+      statusFilter === "all" ||
+      (user.status || 'active').toLowerCase() === statusFilter;
+
     return matchesSearch && matchesStatus;
   });
 
@@ -45,6 +57,27 @@ const AdminUsers = () => {
 
   const handleSendEmail = (email: string) => {
     toast.success(`Email dialog opened for ${email}`);
+  };
+
+  // 🔥 UPDATE USER FUNCTION
+  const handleUpdateUser = async () => {
+    if (!selectedUser) return;
+
+    const { error } = await supabase
+      .from("profiles")
+      .update({
+        balance: editBalance,
+        referral_bonus: editReferral,
+      })
+      .eq("user_id", selectedUser.user_id);
+
+    if (error) {
+      toast.error("Failed to update user");
+    } else {
+      toast.success("User updated successfully");
+      setSelectedUser(null);
+      refetch();
+    }
   };
 
   if (isLoading) {
@@ -63,157 +96,139 @@ const AdminUsers = () => {
   return (
     <AdminLayout>
       <div className="space-y-8">
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-          <div>
-            <h1 className="text-3xl font-heading font-bold mb-2">User Management</h1>
-            <p className="text-muted-foreground">Manage all registered users on the platform.</p>
-          </div>
-          <Button className="btn-hero">
-            <UserPlus className="w-4 h-4 mr-2" />
-            Add User
-          </Button>
-        </div>
 
-        {/* Filters */}
-        <div className="flex flex-col sm:flex-row gap-4">
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
-            <Input
-              placeholder="Search users..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="input-dark pl-10"
-            />
-          </div>
-          <select
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-            className="input-dark px-4 py-2 rounded-md bg-input border border-border"
-          >
-            <option value="all">All Status</option>
-            <option value="active">Active</option>
-            <option value="pending">Pending</option>
-            <option value="suspended">Suspended</option>
-          </select>
-        </div>
-
-        {/* Stats */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-          <div className="dashboard-card text-center">
-            <p className="text-2xl font-heading font-bold">{users.length}</p>
-            <p className="text-muted-foreground text-sm">Total Users</p>
-          </div>
-          <div className="dashboard-card text-center">
-            <p className="text-2xl font-heading font-bold text-primary">
-              {users.filter(u => (u.status || 'active') === "active").length}
-            </p>
-            <p className="text-muted-foreground text-sm">Active</p>
-          </div>
-          <div className="dashboard-card text-center">
-            <p className="text-2xl font-heading font-bold text-warning">
-              {users.filter(u => u.status === "pending").length}
-            </p>
-            <p className="text-muted-foreground text-sm">Pending</p>
-          </div>
-          <div className="dashboard-card text-center">
-            <p className="text-2xl font-heading font-bold text-destructive">
-              {users.filter(u => u.status === "suspended").length}
-            </p>
-            <p className="text-muted-foreground text-sm">Suspended</p>
-          </div>
+        {/* Header */}
+        <div className="flex justify-between">
+          <h1 className="text-3xl font-bold">User Management</h1>
         </div>
 
         {/* Users Table */}
         <div className="dashboard-card">
           <div className="overflow-x-auto">
-            {filteredUsers.length === 0 ? (
-              <p className="text-muted-foreground text-center py-8">No users found</p>
-            ) : (
-              <table className="w-full">
-                <thead>
-                  <tr className="table-header">
-                    <th className="text-left py-3 px-4 rounded-l-lg">User</th>
-                    <th className="text-left py-3 px-4">Country</th>
-                    <th className="text-left py-3 px-4">Joined</th>
-                    <th className="text-left py-3 px-4">Total Deposits</th>
-                    <th className="text-left py-3 px-4">Withdrawals</th>
-                    <th className="text-left py-3 px-4">Status</th>
-                    <th className="text-left py-3 px-4 rounded-r-lg">Actions</th>
+            <table className="w-full">
+              <thead>
+                <tr>
+                  <th>User</th>
+                  <th>Country</th>
+                  <th>Joined</th>
+                  <th>Total Deposits</th>
+                  <th>Withdrawals</th>
+                  <th>Status</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+
+              <tbody>
+                {filteredUsers.map((user) => (
+                  <tr key={user.id}>
+                    <td>
+                      <p>{user.full_name || "Unknown"}</p>
+                      <p className="text-sm text-muted-foreground">{user.email}</p>
+                    </td>
+
+                    <td>{user.country || "N/A"}</td>
+
+                    <td>
+                      {user.created_at
+                        ? format(new Date(user.created_at), "yyyy-MM-dd")
+                        : "N/A"}
+                    </td>
+
+                    <td>${(userDeposits[user.user_id] || 0).toLocaleString()}</td>
+                    <td>${(userWithdrawals[user.user_id] || 0).toLocaleString()}</td>
+
+                    <td>{user.status || "active"}</td>
+
+                    <td>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="sm">
+                            <MoreVertical className="w-4 h-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+
+                        <DropdownMenuContent align="end">
+                          {/* 🔥 UPDATED VIEW DETAILS */}
+                          <DropdownMenuItem
+                            onClick={() => {
+                              setSelectedUser(user);
+                              setEditBalance(user.balance || 0);
+                              setEditReferral(user.referral_bonus || 0);
+                            }}
+                          >
+                            <Eye className="w-4 h-4 mr-2" />
+                            View / Edit
+                          </DropdownMenuItem>
+
+                          <DropdownMenuItem onClick={() => handleSendEmail(user.email)}>
+                            <Mail className="w-4 h-4 mr-2" />
+                            Send Email
+                          </DropdownMenuItem>
+
+                          <DropdownMenuItem
+                            onClick={() => handleStatusChange(user.user_id, "suspended")}
+                          >
+                            <Ban className="w-4 h-4 mr-2" />
+                            Suspend
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </td>
                   </tr>
-                </thead>
-                <tbody>
-                  {filteredUsers.map((user) => (
-                    <tr key={user.id} className="table-row">
-                      <td className="py-4 px-4">
-                        <div>
-                          <p className="font-medium">{user.full_name || 'Unknown'}</p>
-                          <p className="text-sm text-muted-foreground">{user.email}</p>
-                        </div>
-                      </td>
-                      <td className="py-4 px-4 text-muted-foreground">{user.country || 'N/A'}</td>
-                      <td className="py-4 px-4 text-muted-foreground">
-                        {user.created_at ? format(new Date(user.created_at), 'yyyy-MM-dd') : 'N/A'}
-                      </td>
-                      <td className="py-4 px-4 text-success">
-                        ${(userDeposits[user.user_id] || 0).toLocaleString()}
-                      </td>
-                      <td className="py-4 px-4 text-warning">
-                        ${(userWithdrawals[user.user_id] || 0).toLocaleString()}
-                      </td>
-                      <td className="py-4 px-4">
-                        <span className={`status-badge ${
-                          (user.status || 'active') === "active" ? "status-active" :
-                          user.status === "pending" ? "status-pending" :
-                          "status-inactive"
-                        }`}>
-                          {user.status || 'active'}
-                        </span>
-                      </td>
-                      <td className="py-4 px-4">
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="sm">
-                              <MoreVertical className="w-4 h-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end" className="bg-card border-border">
-                            <DropdownMenuItem onClick={() => toast.info("View user details")}>
-                              <Eye className="w-4 h-4 mr-2" />
-                              View Details
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => handleSendEmail(user.email)}>
-                              <Mail className="w-4 h-4 mr-2" />
-                              Send Email
-                            </DropdownMenuItem>
-                            {(user.status || 'active') !== "active" && (
-                              <DropdownMenuItem onClick={() => handleStatusChange(user.user_id, "active")}>
-                                <CheckCircle className="w-4 h-4 mr-2" />
-                                Activate
-                              </DropdownMenuItem>
-                            )}
-                            {user.status !== "suspended" && (
-                              <DropdownMenuItem onClick={() => handleStatusChange(user.user_id, "suspended")}>
-                                <Ban className="w-4 h-4 mr-2" />
-                                Suspend
-                              </DropdownMenuItem>
-                            )}
-                            <DropdownMenuItem 
-                              onClick={() => toast.info("Delete user")}
-                              className="text-destructive"
-                            >
-                              <Trash2 className="w-4 h-4 mr-2" />
-                              Delete
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
+                ))}
+              </tbody>
+            </table>
           </div>
         </div>
+
+        {/* 🔥 EDIT MODAL */}
+        {selectedUser && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+            <div className="bg-card p-6 rounded-lg w-full max-w-md space-y-4">
+
+              <h2 className="text-xl font-bold">Edit User</h2>
+
+              <div>
+                <label className="text-sm">Full Name</label>
+                <Input value={selectedUser.full_name || ""} disabled />
+              </div>
+
+              <div>
+                <label className="text-sm">Email</label>
+                <Input value={selectedUser.email} disabled />
+              </div>
+
+              <div>
+                <label className="text-sm">Balance</label>
+                <Input
+                  type="number"
+                  value={editBalance}
+                  onChange={(e) => setEditBalance(Number(e.target.value))}
+                />
+              </div>
+
+              <div>
+                <label className="text-sm">Referral Bonus</label>
+                <Input
+                  type="number"
+                  value={editReferral}
+                  onChange={(e) => setEditReferral(Number(e.target.value))}
+                />
+              </div>
+
+              <div className="flex justify-end gap-2">
+                <Button variant="ghost" onClick={() => setSelectedUser(null)}>
+                  Cancel
+                </Button>
+                <Button onClick={handleUpdateUser}>
+                  Save Changes
+                </Button>
+              </div>
+
+            </div>
+          </div>
+        )}
+
       </div>
     </AdminLayout>
   );
