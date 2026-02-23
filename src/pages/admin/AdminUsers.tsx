@@ -1,287 +1,240 @@
-import AdminLayout from "@/components/admin/AdminLayout"; import { Button } from "@/components/ui/button"; import { Input } from "@/components/ui/input"; import { MoreVertical, Eye, Ban, Mail, } from "lucide-react"; import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, } from "@/components/ui/dropdown-menu"; import { toast } from "sonner"; import { useMemo, useState } from "react"; import { useAdminUsers } from "@/hooks/useAdminData"; import { format } from "date-fns"; import { supabase } from "@/integrations/supabase/client";
+import AdminLayout from "@/components/admin/AdminLayout";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import {
+Search,
+MoreVertical,
+Eye,
+Ban,
+CheckCircle,
+Trash2,
+Mail,
+UserPlus
+} from "lucide-react";
+import {
+DropdownMenu,
+DropdownMenuContent,
+DropdownMenuItem,
+DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { toast } from "sonner";
+import { useState } from "react";
+import { useAdminUsers } from "@/hooks/useAdminData";
+import { format } from "date-fns";
+import { supabase } from "@/integrations/supabase/client";
 
-interface AdminUser { id: string; user_id: string; full_name?: string; email: string; country?: string; created_at?: string; balance?: number; referral_bonus?: number; profit_percentage?: number; status?: string; }
+const AdminUsers = () => {
+const { users, userDeposits, userWithdrawals, isLoading, updateUserStatus, refetch } = useAdminUsers();
 
-const AdminUsers = () => { const { users, userDeposits, userWithdrawals, isLoading, updateUserStatus, refetch, } = useAdminUsers();
+const [searchQuery, setSearchQuery] = useState("");
+const [statusFilter, setStatusFilter] = useState("all");
 
-const [searchQuery, setSearchQuery] = useState<string>(""); const [selectedUser, setSelectedUser] = useState<AdminUser | null>(null); const [profitPercentage, setProfitPercentage] = useState<number>(0); const [referralBonus, setReferralBonus] = useState<number>(0); const [isUpdating, setIsUpdating] = useState<boolean>(false);
+// 🔥 NEW STATES
+const [selectedUser, setSelectedUser] = useState<any>(null);
+const [editBalance, setEditBalance] = useState(0);
+const [editReferral, setEditReferral] = useState(0);
 
-const filteredUsers = useMemo(() => { return users.filter((user: AdminUser) => { const nameMatch = (user.full_name || "") .toLowerCase() .includes(searchQuery.toLowerCase());
+const filteredUsers = users.filter(user => {
+const matchesSearch =
+(user.full_name?.toLowerCase() || '').includes(searchQuery.toLowerCase()) ||
+user.email.toLowerCase().includes(searchQuery.toLowerCase());
 
-const emailMatch = user.email
-    .toLowerCase()
-    .includes(searchQuery.toLowerCase());
+const matchesStatus =  
+  statusFilter === "all" ||  
+  (user.status || 'active').toLowerCase() === statusFilter;  
 
-  return nameMatch || emailMatch;
+return matchesSearch && matchesStatus;
+
 });
 
-}, [users, searchQuery]);
-
-const handleOpenEditModal = (user: AdminUser) => { setSelectedUser(user); setProfitPercentage(user.profit_percentage ?? 0); setReferralBonus(user.referral_bonus ?? 0); };
-
-const handleCloseModal = () => { setSelectedUser(null); setProfitPercentage(0); setReferralBonus(0); };
-
-const handleStatusChange = async ( userId: string, newStatus: string ) => { const result = await updateUserStatus(userId, newStatus);
-
+const handleStatusChange = async (userId: string, newStatus: string) => {
+const result = await updateUserStatus(userId, newStatus);
 if (result.success) {
-  toast.success(`User status updated to ${newStatus}`);
-  refetch();
+toast.success(User status updated to ${newStatus});
 } else {
-  toast.error("Failed to update user status");
+toast.error("Failed to update user status");
+}
+};
+
+const handleSendEmail = (email: string) => {
+toast.success(Email dialog opened for ${email});
+};
+
+// 🔥 UPDATE USER FUNCTION
+const handleUpdateUser = async () => {
+if (!selectedUser) return;
+
+const { error } = await supabase  
+  .from("profiles")  
+  .update({  
+    balance: editBalance,  
+    referral_bonus: editReferral,  
+  })  
+  .eq("user_id", selectedUser.user_id);  
+
+if (error) {  
+  toast.error("Failed to update user");  
+} else {  
+  toast.success("User updated successfully");  
+  setSelectedUser(null);  
+  refetch();  
 }
 
 };
 
-const handleSendEmail = (email: string) => { toast.success(Email dialog opened for ${email}); };
-
-/**
-
-FIXED & SAFE BALANCE UPDATE
-
-Uses TOTAL DEPOSITS as principal
-
-
-Supports both positive and negative percentage
-
-
-Prevents balance inflation/stacking bugs */
-                          const handleUpdateUser = async () => { if (!selectedUser) return;
-
-
-
-try {
-  setIsUpdating(true);
-
-  // Principal = Total confirmed deposits
-  const principal = userDeposits[selectedUser.user_id] || 0;
-
-  // Deterministic financial formula
-  const calculatedBalance =
-    principal * (1 + profitPercentage / 100);
-
-  const { error } = await supabase
-    .from("profiles")
-    .update({
-      balance: Number(calculatedBalance.toFixed(2)),
-      profit_percentage: profitPercentage,
-      referral_bonus: referralBonus,
-    })
-    .eq("user_id", selectedUser.user_id);
-
-  if (error) {
-    console.error("Update error:", error);
-    toast.error("Failed to update user balance");
-    return;
-  }
-
-  toast.success("User balance updated successfully");
-  handleCloseModal();
-  refetch();
-} catch (err) {
-  console.error(err);
-  toast.error("Unexpected error occurred");
-} finally {
-  setIsUpdating(false);
+if (isLoading) {
+return (
+<AdminLayout>
+<div className="flex items-center justify-center h-64">
+<div className="text-center">
+<div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+<p className="text-muted-foreground">Loading users...</p>
+</div>
+</div>
+</AdminLayout>
+);
 }
 
-};
+return (
+<AdminLayout>
+<div className="space-y-8">
 
-if (isLoading) { return ( <AdminLayout> <div className="flex items-center justify-center h-64"> <div className="text-center"> <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4" /> <p className="text-muted-foreground">Loading users...</p> </div> </div> </AdminLayout> ); }
+{/* Header */}  
+    <div className="flex justify-between">  
+      <h1 className="text-3xl font-bold">User Management</h1>  
+    </div>  
 
-return ( <AdminLayout> <div className="space-y-8"> {/* Header */} <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4"> <h1 className="text-3xl font-bold">User Management</h1>
+    {/* Users Table */}  
+    <div className="dashboard-card">  
+      <div className="overflow-x-auto">  
+        <table className="w-full">  
+          <thead>  
+            <tr>  
+              <th>User</th>  
+              <th>Country</th>  
+              <th>Joined</th>  
+              <th>Total Deposits</th>  
+              <th>Withdrawals</th>  
+              <th>Status</th>  
+              <th>Actions</th>  
+            </tr>  
+          </thead>  
 
-<Input
-        placeholder="Search by name or email..."
-        value={searchQuery}
-        onChange={(e) => setSearchQuery(e.target.value)}
-        className="max-w-sm"
-      />
-    </div>
+          <tbody>  
+            {filteredUsers.map((user) => (  
+              <tr key={user.id}>  
+                <td>  
+                  <p>{user.full_name || "Unknown"}</p>  
+                  <p className="text-sm text-muted-foreground">{user.email}</p>  
+                </td>  
 
-    {/* Users Table */}
-    <div className="dashboard-card">
-      <div className="overflow-x-auto">
-        <table className="w-full">
-          <thead>
-            <tr className="text-left border-b">
-              <th className="p-3">User</th>
-              <th className="p-3">Country</th>
-              <th className="p-3">Joined</th>
-              <th className="p-3">Total Deposits</th>
-              <th className="p-3">Withdrawals</th>
-              <th className="p-3">Current Balance</th>
-              <th className="p-3">Status</th>
-              <th className="p-3">Actions</th>
-            </tr>
-          </thead>
+                <td>{user.country || "N/A"}</td>  
 
-          <tbody>
-            {filteredUsers.map((user: AdminUser) => {
-              const totalDeposits =
-                userDeposits[user.user_id] || 0;
-              const totalWithdrawals =
-                userWithdrawals[user.user_id] || 0;
+                <td>  
+                  {user.created_at  
+                    ? format(new Date(user.created_at), "yyyy-MM-dd")  
+                    : "N/A"}  
+                </td>  
 
-              return (
-                <tr key={user.id} className="border-b">
-                  <td className="p-3">
-                    <p className="font-semibold">
-                      {user.full_name || "Unknown"}
-                    </p>
-                    <p className="text-sm text-muted-foreground">
-                      {user.email}
-                    </p>
-                  </td>
+                <td>${(userDeposits[user.user_id] || 0).toLocaleString()}</td>  
+                <td>${(userWithdrawals[user.user_id] || 0).toLocaleString()}</td>  
 
-                  <td className="p-3">
-                    {user.country || "N/A"}
-                  </td>
+                <td>{user.status || "active"}</td>  
 
-                  <td className="p-3">
-                    {user.created_at
-                      ? format(
-                          new Date(user.created_at),
-                          "yyyy-MM-dd"
-                        )
-                      : "N/A"}
-                  </td>
+                <td>  
+                  <DropdownMenu>  
+                    <DropdownMenuTrigger asChild>  
+                      <Button variant="ghost" size="sm">  
+                        <MoreVertical className="w-4 h-4" />  
+                      </Button>  
+                    </DropdownMenuTrigger>  
 
-                  <td className="p-3 font-semibold text-green-600">
-                    ${totalDeposits.toLocaleString()}
-                  </td>
+                    <DropdownMenuContent align="end">  
+                      {/* 🔥 UPDATED VIEW DETAILS */}  
+                      <DropdownMenuItem  
+                        onClick={() => {  
+                          setSelectedUser(user);  
+                          setEditBalance(user.balance || 0);  
+                          setEditReferral(user.referral_bonus || 0);  
+                        }}  
+                      >  
+                        <Eye className="w-4 h-4 mr-2" />  
+                        View / Edit  
+                      </DropdownMenuItem>  
 
-                  <td className="p-3 text-red-500">
-                    ${totalWithdrawals.toLocaleString()}
-                  </td>
+                      <DropdownMenuItem onClick={() => handleSendEmail(user.email)}>  
+                        <Mail className="w-4 h-4 mr-2" />  
+                        Send Email  
+                      </DropdownMenuItem>  
 
-                  <td className="p-3 font-bold text-primary">
-                    ${(user.balance || 0).toLocaleString()}
-                  </td>
+                      <DropdownMenuItem  
+                        onClick={() => handleStatusChange(user.user_id, "suspended")}  
+                      >  
+                        <Ban className="w-4 h-4 mr-2" />  
+                        Suspend  
+                      </DropdownMenuItem>  
+                    </DropdownMenuContent>  
+                  </DropdownMenu>  
+                </td>  
+              </tr>  
+            ))}  
+          </tbody>  
+        </table>  
+      </div>  
+    </div>  
 
-                  <td className="p-3 capitalize">
-                    {user.status || "active"}
-                  </td>
+    {/* 🔥 EDIT MODAL */}  
+    {selectedUser && (  
+      <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">  
+        <div className="bg-card p-6 rounded-lg w-full max-w-md space-y-4">  
 
-                  <td className="p-3">
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="sm">
-                          <MoreVertical className="w-4 h-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
+          <h2 className="text-xl font-bold">Edit User</h2>  
 
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem
-                          onClick={() => handleOpenEditModal(user)}
-                        >
-                          <Eye className="w-4 h-4 mr-2" />
-                          Adjust Profit %
-                        </DropdownMenuItem>
+          <div>  
+            <label className="text-sm">Full Name</label>  
+            <Input value={selectedUser.full_name || ""} disabled />  
+          </div>  
 
-                        <DropdownMenuItem
-                          onClick={() =>
-                            handleSendEmail(user.email)
-                          }
-                        >
-                          <Mail className="w-4 h-4 mr-2" />
-                          Send Email
-                        </DropdownMenuItem>
+          <div>  
+            <label className="text-sm">Email</label>  
+            <Input value={selectedUser.email} disabled />  
+          </div>  
 
-                        <DropdownMenuItem
-                          onClick={() =>
-                            handleStatusChange(
-                              user.user_id,
-                              "suspended"
-                            )
-                          }
-                        >
-                          <Ban className="w-4 h-4 mr-2" />
-                          Suspend User
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
-    </div>
+          <div>  
+            <label className="text-sm">Balance</label>  
+            <Input  
+              type="number"  
+              value={editBalance}  
+              onChange={(e) => setEditBalance(Number(e.target.value))}  
+            />  
+          </div>  
 
-    {/* Edit Modal */}
-    {selectedUser && (
-      <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-        <div className="bg-card p-6 rounded-lg w-full max-w-md space-y-5 shadow-xl">
-          <h2 className="text-xl font-bold">
-            Adjust User Profit
-          </h2>
+          <div>  
+            <label className="text-sm">Referral Bonus</label>  
+            <Input  
+              type="number"  
+              value={editReferral}  
+              onChange={(e) => setEditReferral(Number(e.target.value))}  
+            />  
+          </div>  
 
-          <div className="space-y-3">
-            <div>
-              <label className="text-sm">Full Name</label>
-              <Input
-                value={selectedUser.full_name || ""}
-                disabled
-              />
-            </div>
+          <div className="flex justify-end gap-2">  
+            <Button variant="ghost" onClick={() => setSelectedUser(null)}>  
+              Cancel  
+            </Button>  
+            <Button onClick={handleUpdateUser}>  
+              Save Changes  
+            </Button>  
+          </div>  
 
-            <div>
-              <label className="text-sm">Email</label>
-              <Input value={selectedUser.email} disabled />
-            </div>
+        </div>  
+      </div>  
+    )}  
 
-            <div>
-              <label className="text-sm font-semibold">
-                Profit Percentage (%)
-              </label>
-              <Input
-                type="number"
-                value={profitPercentage}
-                onChange={(e) =>
-                  setProfitPercentage(Number(e.target.value))
-                }
-                placeholder="e.g. 10 or -10"
-              />
-              <p className="text-xs text-muted-foreground mt-1">
-                Balance is calculated from total deposits. Supports
-                increase and decrease safely.
-              </p>
-            </div>
-
-            <div>
-              <label className="text-sm">Referral Bonus</label>
-              <Input
-                type="number"
-                value={referralBonus}
-                onChange={(e) =>
-                  setReferralBonus(Number(e.target.value))
-                }
-              />
-            </div>
-          </div>
-
-          <div className="flex justify-end gap-3 pt-2">
-            <Button
-              variant="ghost"
-              onClick={handleCloseModal}
-              disabled={isUpdating}
-            >
-              Cancel
-            </Button>
-            <Button
-              onClick={handleUpdateUser}
-              disabled={isUpdating}
-            >
-              {isUpdating ? "Updating..." : "Save Changes"}
-            </Button>
-          </div>
-        </div>
-      </div>
-    )}
-  </div>
+  </div>  
 </AdminLayout>
 
-); };
+);
+};
 
 export default AdminUsers;
