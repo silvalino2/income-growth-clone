@@ -44,7 +44,8 @@ Uses TOTAL DEPOSITS as principal
 Supports both positive and negative percentage
 
 
-Prevents balance inflation/stacking bugs */ const handleUpdateUser = async () => { if (!selectedUser) return;
+Prevents balance inflation/stacking bugs */
+                          const handleUpdateUser = async () => { if (!selectedUser) return;
 
 
 
