@@ -1,10 +1,18 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
-import { Tables } from '@/integrations/supabase/types';
 
-type DepositRow = Tables<'deposits'>;
-type WithdrawalRow = Tables<'withdrawals'>;
+interface Deposit {
+  amount: number | null;
+  status: string | null;
+  profit?: number | null;
+  current_balance?: number | null;
+}
+
+interface Withdrawal {
+  amount: number | null;
+  status: string | null;
+}
 
 export function useUserStats() {
   const { user } = useAuth();
@@ -25,9 +33,7 @@ export function useUserStats() {
     }
 
     try {
-      // ===============================
-      // 1️⃣ GET CONFIRMED DEPOSITS
-      // ===============================
+      // Fetch deposits (includes admin-edited fields)
       const { data: deposits, error: depositError } = await supabase
         .from('deposits')
         .select('amount, status, profit, current_balance')
@@ -35,40 +41,35 @@ export function useUserStats() {
 
       if (depositError) throw depositError;
 
-      const confirmedDeposits: DepositRow[] =
+      const confirmedDeposits: Deposit[] =
         (deposits || []).filter(
-          (d) => d.status === 'confirmed'
+          (d: Deposit) => d.status === 'confirmed'
         );
 
-      // ===============================
-      // 2️⃣ CALCULATE TOTAL DEPOSIT
-      // ===============================
+      // Total deposited (original money)
       const totalDeposit = confirmedDeposits.reduce(
         (sum, d) => sum + Number(d.amount || 0),
         0
       );
 
-      // ===============================
-      // 3️⃣ USE STORED PROFIT (ADMIN CONTROLLED)
-      // ===============================
+      // Admin-controlled profit (no recalculation)
       const totalProfit = confirmedDeposits.reduce(
         (sum, d) => sum + Number(d.profit || 0),
         0
       );
 
-      // ===============================
-      // 4️⃣ USE STORED CURRENT BALANCE
-      // (THIS FIXES SKYROCKET + DECREASE ISSUE)
-      // ===============================
+      // CRITICAL: Use current_balance so admin increase/decrease reflects
       const balanceFromDeposits = confirmedDeposits.reduce(
         (sum, d) =>
-          sum + Number(d.current_balance ?? d.amount ?? 0),
+          sum + Number(
+            d.current_balance !== null && d.current_balance !== undefined
+              ? d.current_balance
+              : d.amount || 0
+          ),
         0
       );
 
-      // ===============================
-      // 5️⃣ GET APPROVED WITHDRAWALS
-      // ===============================
+      // Fetch withdrawals
       const { data: withdrawals, error: withdrawalError } = await supabase
         .from('withdrawals')
         .select('amount, status')
@@ -76,13 +77,11 @@ export function useUserStats() {
 
       if (withdrawalError) throw withdrawalError;
 
-      const totalWithdrawal = (withdrawals || [])
+      const totalWithdrawal = (withdrawals as Withdrawal[] || [])
         .filter((w) => w.status === 'approved')
         .reduce((sum, w) => sum + Number(w.amount || 0), 0);
 
-      // ===============================
-      // 6️⃣ FINAL BALANCE
-      // ===============================
+      // Final balance (reflects admin edits properly)
       const totalBalance = balanceFromDeposits - totalWithdrawal;
 
       setStats({
@@ -104,9 +103,8 @@ export function useUserStats() {
 
     if (!user) return;
 
-    // 🔥 REALTIME: LISTEN FOR ADMIN CHANGES ON DEPOSITS
-    const depositChannel = supabase
-      .channel('deposits-realtime')
+    const channel = supabase
+      .channel('user-stats-realtime')
       .on(
         'postgres_changes',
         {
@@ -121,28 +119,10 @@ export function useUserStats() {
       )
       .subscribe();
 
-    // 🔥 REALTIME: LISTEN FOR WITHDRAWAL CHANGES
-    const withdrawalChannel = supabase
-      .channel('withdrawals-realtime')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'withdrawals',
-          filter: `user_id=eq.${user.id}`,
-        },
-        () => {
-          fetchStats();
-        }
-      )
-      .subscribe();
-
     return () => {
-      supabase.removeChannel(depositChannel);
-      supabase.removeChannel(withdrawalChannel);
+      supabase.removeChannel(channel);
     };
   }, [user]);
 
   return { stats, isLoading, refetch: fetchStats };
-        }
+  }
