@@ -1,151 +1,220 @@
-import { useState, useEffect } from "react";
-import { supabase } from "@/integrations/supabase/client";
-import type { Tables } from "@/integrations/supabase/types";export function useAdminUsers() {
-  const [users, setUsers] = useState<Profile[]>([]);
-  const [userBalances, setUserBalances] = useState<Record<string, number>>({});
-  const [userProfits, setUserProfits] = useState<Record<string, number>>({});
+import { useState, useEffect } from 'react';
+import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/contexts/AuthContext';
+import { Tables } from '@/integrations/supabase/types';
+
+type DepositRow = Tables<'deposits'>;
+type WithdrawalRow = Tables<'withdrawals'>;
+type InvestmentPlan = Tables<'investment_plans'>;
+
+interface DepositWithPlan extends DepositRow {
+  plan_name?: string;
+  roi_percentage?: number;
+}
+
+export function useUserStats() {
+  const { user } = useAuth();
+  const [stats, setStats] = useState({
+    totalBalance: 0,
+    totalProfit: 0,
+    totalDeposit: 0,
+    totalWithdrawal: 0,
+  });
   const [isLoading, setIsLoading] = useState(true);
 
-  const calculateBalance = (
-    deposits: number,
-    withdrawals: number,
-    percentage: number
-  ) => {
-    const net = deposits - withdrawals;
+  const fetchStats = async () => {
+    if (!user) {
+      setIsLoading(false);
+      return;
+    }
 
-    // Apply percentage correctly (supports increase AND decrease)
-    const profitAmount = (net * percentage) / 100;
-    const finalBalance = net + profitAmount;
-
-    // Prevent weird float inflation
-    return Number(finalBalance.toFixed(2));
-  };
-
-  const fetchUsers = async () => {
-    setIsLoading(true);
     try {
-      // 1. Fetch users with profit percentage
-      const { data: profiles, error: profilesError } = await supabase
-        .from('profiles')
-        .select('*')
-        .order('created_at', { ascending: false });
-
-      if (profilesError) throw profilesError;
-
-      // 2. Fetch confirmed deposits
-      const { data: deposits, error: depositsError } = await supabase
+      // Fetch user deposits including admin-updated fields
+      const { data: deposits } = await supabase
         .from('deposits')
-        .select('user_id, amount, status');
+        .select('amount, status, profit, current_balance')
+        .eq('user_id', user.id);
 
-      if (depositsError) throw depositsError;
+      const confirmedDeposits = (deposits || []).filter(d => d.status === 'confirmed');
 
-      // 3. Fetch approved withdrawals
-      const { data: withdrawals, error: withdrawalsError } = await supabase
+      // Total deposited (confirmed)
+      const totalDeposit = confirmedDeposits.reduce((sum, d) => sum + Number(d.amount || 0), 0);
+
+      // Use admin-controlled profit
+      const totalProfit = confirmedDeposits.reduce((sum, d) => sum + Number(d.profit || 0), 0);
+
+      // Current balance reflecting admin edits
+      const totalBalance = confirmedDeposits.reduce(
+        (sum, d) => sum + Number(d.current_balance ?? d.amount ?? 0),
+        0
+      );
+
+      // Fetch withdrawals
+      const { data: withdrawals } = await supabase
         .from('withdrawals')
-        .select('user_id, amount, status');
+        .select('amount, status')
+        .eq('user_id', user.id);
 
-      if (withdrawalsError) throw withdrawalsError;
+      const totalWithdrawal = (withdrawals || [])
+        .filter(w => w.status === 'approved')
+        .reduce((sum, w) => sum + Number(w.amount || 0), 0);
 
-      const depositMap: Record<string, number> = {};
-      const withdrawalMap: Record<string, number> = {};
-      const balanceMap: Record<string, number> = {};
-      const profitMap: Record<string, number> = {};
-
-      // Sum confirmed deposits per user
-      deposits?.forEach((d) => {
-        if (d.status === 'confirmed') {
-          depositMap[d.user_id] =
-            (depositMap[d.user_id] || 0) + Number(d.amount);
-        }
+      // Final balance = admin-adjusted balance minus approved withdrawals
+      setStats({
+        totalBalance: totalBalance - totalWithdrawal,
+        totalProfit,
+        totalDeposit,
+        totalWithdrawal,
       });
-
-      // Sum approved withdrawals per user
-      withdrawals?.forEach((w) => {
-        if (w.status === 'approved') {
-          withdrawalMap[w.user_id] =
-            (withdrawalMap[w.user_id] || 0) + Number(w.amount);
-        }
-      });
-
-      // Calculate REAL balance using percentage (ADMIN CONTROLLED)
-      profiles?.forEach((user) => {
-        const depositsTotal = depositMap[user.user_id] || 0;
-        const withdrawalsTotal = withdrawalMap[user.user_id] || 0;
-        const percentage = Number(user.profit_percentage || 0);
-
-        const net = depositsTotal - withdrawalsTotal;
-        const profitValue = (net * percentage) / 100;
-        const finalBalance = calculateBalance(
-          depositsTotal,
-          withdrawalsTotal,
-          percentage
-        );
-
-        balanceMap[user.user_id] = finalBalance;
-        profitMap[user.user_id] = Number(profitValue.toFixed(2));
-      });
-
-      setUsers(profiles || []);
-      setUserBalances(balanceMap);
-      setUserProfits(profitMap);
     } catch (error) {
-      console.error('Error fetching admin users:', error);
+      console.error('Error fetching user stats:', error);
     } finally {
       setIsLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchUsers();
+    fetchStats();
 
-    // 🔴 REAL-TIME SYNC (THIS FIXES "NOT REFLECTING" ISSUE)
+    if (!user) return;
+
+    // Realtime subscription to reflect admin changes instantly
     const channel = supabase
-      .channel('admin-users-sync')
+      .channel(`user-stats-${user.id}`)
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'profiles' },
-        () => fetchUsers()
-      )
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'deposits' },
-        () => fetchUsers()
-      )
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'withdrawals' },
-        () => fetchUsers()
+        {
+          event: '*',
+          schema: 'public',
+          table: 'deposits',
+          filter: `user_id=eq.${user.id}`,
+        },
+        () => fetchStats()
       )
       .subscribe();
 
     return () => {
       supabase.removeChannel(channel);
     };
-  }, []);
+  }, [user]);
 
-  const updateUserStatus = async (userId: string, status: string) => {
+  return { stats, isLoading, refetch: fetchStats };
+}
+
+export function useUserDeposits() {
+  const { user } = useAuth();
+  const [deposits, setDeposits] = useState<DepositWithPlan[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  const fetchDeposits = async () => {
+    if (!user) return;
+
     try {
-      const { error } = await supabase
-        .from('profiles')
-        .update({ status })
-        .eq('user_id', userId);
-
+      const { data: depositsData, error } = await supabase
+        .from('deposits')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false });
       if (error) throw error;
 
-      await fetchUsers(); // instant refresh
-      return { success: true };
+      // Fetch plans for plan details
+      const { data: plansData } = await supabase
+        .from('investment_plans')
+        .select('id, name, roi_percentage');
+
+      const plansMap = new Map(plansData?.map(p => [p.id, p]) || []);
+
+      const enrichedDeposits: DepositWithPlan[] = (depositsData || []).map(d => {
+        const plan = d.plan_id ? plansMap.get(d.plan_id) : null;
+        return {
+          ...d,
+          plan_name: plan?.name || 'N/A',
+          roi_percentage: plan?.roi_percentage || 0,
+        };
+      });
+
+      setDeposits(enrichedDeposits);
     } catch (error) {
-      console.error('Error updating user status:', error);
-      return { success: false, error };
+      console.error('Error fetching deposits:', error);
+    } finally {
+      setIsLoading(false);
     }
   };
 
-  return {
-    users,
-    userBalances, // ✅ USE THIS IN DASHBOARD
-    userProfits,  // ✅ SHOW CURRENT PROFIT
-    isLoading,
-    updateUserStatus,
-    refetch: fetchUsers,
-  };
+  useEffect(() => {
+    fetchDeposits();
+
+    if (!user) return;
+
+    const channel = supabase
+      .channel(`user-deposits-${user.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'deposits',
+          filter: `user_id=eq.${user.id}`,
+        },
+        () => fetchDeposits()
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [user]);
+
+  return { deposits, isLoading, refetch: fetchDeposits };
 }
+
+export function useUserWithdrawals() {
+  const { user } = useAuth();
+  const [withdrawals, setWithdrawals] = useState<WithdrawalRow[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  const fetchWithdrawals = async () => {
+    if (!user) return;
+
+    try {
+      const { data, error } = await supabase
+        .from('withdrawals')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+
+      setWithdrawals(data || []);
+    } catch (error) {
+      console.error('Error fetching withdrawals:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchWithdrawals();
+
+    if (!user) return;
+
+    const channel = supabase
+      .channel(`user-withdrawals-${user.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'withdrawals',
+          filter: `user_id=eq.${user.id}`,
+        },
+        () => fetchWithdrawals()
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [user]);
+
+  return { withdrawals, isLoading, refetch: fetchWithdrawals };
+        }
