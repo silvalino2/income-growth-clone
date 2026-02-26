@@ -18,6 +18,9 @@ interface WithdrawalWithDetails extends WithdrawalRow {
   user_email?: string;
 }
 
+// ----------------------------
+// ADMIN STATS
+// ----------------------------
 export function useAdminStats() {
   const [stats, setStats] = useState({
     totalUsers: 0,
@@ -40,24 +43,22 @@ export function useAdminStats() {
         .from('deposits')
         .select('amount, status, profit, current_balance');
 
-      const activeDeposits = deposits
-        ?.filter(d => d.status === 'confirmed')
-        .reduce((sum, d) => sum + Number(d.current_balance ?? d.amount ?? 0), 0) || 0;
-
-      const totalProfit = deposits
-        ?.filter(d => d.status === 'confirmed')
-        .reduce((sum, d) => sum + Number(d.profit ?? 0), 0) || 0;
+      const activeDeposits =
+        deposits
+          ?.filter(d => d.status === 'confirmed')
+          .reduce((sum, d) => sum + Number(d.current_balance ?? d.amount ?? 0), 0) || 0;
 
       const { data: withdrawals } = await supabase
         .from('withdrawals')
         .select('amount, status');
 
-      const totalWithdrawals = withdrawals
-        ?.filter(w => w.status === 'approved')
-        .reduce((sum, w) => sum + Number(w.amount ?? 0), 0) || 0;
+      const totalWithdrawals =
+        withdrawals
+          ?.filter(w => w.status === 'approved')
+          .reduce((sum, w) => sum + Number(w.amount ?? 0), 0) || 0;
 
-      const pendingWithdrawals = withdrawals
-        ?.filter(w => w.status === 'pending').length || 0;
+      const pendingWithdrawals =
+        withdrawals?.filter(w => w.status === 'pending').length || 0;
 
       const today = new Date();
       today.setHours(0, 0, 0, 0);
@@ -67,7 +68,8 @@ export function useAdminStats() {
         .select('*', { count: 'exact', head: true })
         .gte('created_at', today.toISOString());
 
-      const activeInvestments = deposits?.filter(d => d.status === 'confirmed').length || 0;
+      const activeInvestments =
+        deposits?.filter(d => d.status === 'confirmed').length || 0;
 
       const platformRevenue = activeDeposits * 0.1;
 
@@ -91,9 +93,12 @@ export function useAdminStats() {
     fetchStats();
   }, []);
 
-  return { stats, totalProfit: 0, isLoading, refetch: fetchStats };
+  return { stats, isLoading, refetch: fetchStats };
 }
 
+// ----------------------------
+// ADMIN USERS
+// ----------------------------
 export function useAdminUsers() {
   const [users, setUsers] = useState<Profile[]>([]);
   const [userDeposits, setUserDeposits] = useState<Record<string, number>>({});
@@ -116,7 +121,9 @@ export function useAdminUsers() {
       const depositsMap: Record<string, number> = {};
       deposits?.forEach(d => {
         if (d.status === 'confirmed') {
-          depositsMap[d.user_id] = (depositsMap[d.user_id] || 0) + Number(d.current_balance ?? d.amount ?? 0);
+          depositsMap[d.user_id] =
+            (depositsMap[d.user_id] || 0) +
+            Number(d.current_balance ?? d.amount ?? 0);
         }
       });
       setUserDeposits(depositsMap);
@@ -128,7 +135,9 @@ export function useAdminUsers() {
       const withdrawalsMap: Record<string, number> = {};
       withdrawals?.forEach(w => {
         if (w.status === 'approved') {
-          withdrawalsMap[w.user_id] = (withdrawalsMap[w.user_id] || 0) + Number(w.amount ?? 0);
+          withdrawalsMap[w.user_id] =
+            (withdrawalsMap[w.user_id] || 0) +
+            Number(w.amount ?? 0);
         }
       });
       setUserWithdrawals(withdrawalsMap);
@@ -147,11 +156,13 @@ export function useAdminUsers() {
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'deposits' },
-        () => fetchUsers().catch(console.error)
+        () => fetchUsers()
       )
       .subscribe();
 
-    return () => supabase.removeChannel(channel);
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   const updateUserStatus = async (userId: string, status: string) => {
@@ -170,9 +181,19 @@ export function useAdminUsers() {
     }
   };
 
-  return { users, userDeposits, userWithdrawals, isLoading, updateUserStatus, refetch: fetchUsers };
+  return {
+    users,
+    userDeposits,
+    userWithdrawals,
+    isLoading,
+    updateUserStatus,
+    refetch: fetchUsers,
+  };
 }
 
+// ----------------------------
+// ADMIN DEPOSITS (Reflects to user dashboard)
+// ----------------------------
 export function useAdminDeposits() {
   const [deposits, setDeposits] = useState<DepositWithDetails[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -192,19 +213,25 @@ export function useAdminDeposits() {
         .from('investment_plans')
         .select('id, name');
 
-      const profilesMap = new Map(profilesData?.map(p => [p.user_id, p]) || []);
-      const plansMap = new Map(plansData?.map(p => [p.id, p]) || []);
+      const profilesMap = new Map(
+        profilesData?.map(p => [p.user_id, p]) || []
+      );
+      const plansMap = new Map(
+        plansData?.map(p => [p.id, p]) || []
+      );
 
-      const enrichedDeposits: DepositWithDetails[] = (depositsData || []).map(d => {
-        const profile = profilesMap.get(d.user_id);
-        const plan = d.plan_id ? plansMap.get(d.plan_id) : null;
-        return {
-          ...d,
-          user_name: profile?.full_name || 'Unknown',
-          user_email: profile?.email || 'Unknown',
-          plan_name: plan?.name || 'N/A',
-        };
-      });
+      const enrichedDeposits: DepositWithDetails[] =
+        (depositsData || []).map(d => {
+          const profile = profilesMap.get(d.user_id);
+          const plan = d.plan_id ? plansMap.get(d.plan_id) : null;
+
+          return {
+            ...d,
+            user_name: profile?.full_name || 'Unknown',
+            user_email: profile?.email || 'Unknown',
+            plan_name: plan?.name || 'N/A',
+          };
+        });
 
       setDeposits(enrichedDeposits);
     } catch (error) {
@@ -216,12 +243,28 @@ export function useAdminDeposits() {
 
   useEffect(() => {
     fetchDeposits();
+
+    const channel = supabase
+      .channel('admin-deposits-realtime')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'deposits' },
+        fetchDeposits
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   const updateDepositStatus = async (depositId: string, status: string) => {
     try {
       const updateData: { status: string; confirmed_at?: string } = { status };
-      if (status === 'confirmed') updateData.confirmed_at = new Date().toISOString();
+
+      if (status === 'confirmed') {
+        updateData.confirmed_at = new Date().toISOString();
+      }
 
       const { error } = await supabase
         .from('deposits')
@@ -229,6 +272,7 @@ export function useAdminDeposits() {
         .eq('id', depositId);
 
       if (error) throw error;
+
       await fetchDeposits();
       return { success: true };
     } catch (error) {
@@ -238,4 +282,87 @@ export function useAdminDeposits() {
   };
 
   return { deposits, isLoading, updateDepositStatus, refetch: fetchDeposits };
-             }
+}
+
+// ----------------------------
+// 🚨 THIS WAS MISSING (CAUSE OF YOUR CURRENT VERCEL ERROR)
+// ADMIN WITHDRAWALS
+// ----------------------------
+export function useAdminWithdrawals() {
+  const [withdrawals, setWithdrawals] = useState<WithdrawalWithDetails[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  const fetchWithdrawals = async () => {
+    try {
+      const { data: withdrawalsData } = await supabase
+        .from('withdrawals')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      const { data: profilesData } = await supabase
+        .from('profiles')
+        .select('user_id, full_name, email');
+
+      const profilesMap = new Map(
+        profilesData?.map(p => [p.user_id, p]) || []
+      );
+
+      const enriched: WithdrawalWithDetails[] =
+        (withdrawalsData || []).map(w => {
+          const profile = profilesMap.get(w.user_id);
+          return {
+            ...w,
+            user_name: profile?.full_name || 'Unknown',
+            user_email: profile?.email || 'Unknown',
+          };
+        });
+
+      setWithdrawals(enriched);
+    } catch (error) {
+      console.error('Error fetching withdrawals:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchWithdrawals();
+
+    const channel = supabase
+      .channel('admin-withdrawals-realtime')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'withdrawals' },
+        fetchWithdrawals
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
+
+  const updateWithdrawalStatus = async (withdrawalId: string, status: string) => {
+    try {
+      const { error } = await supabase
+        .from('withdrawals')
+        .update({ status })
+        .eq('id', withdrawalId);
+
+      if (error) throw error;
+
+      await fetchWithdrawals();
+      return { success: true };
+    } catch (error) {
+      console.error('Error updating withdrawal status:', error);
+      return { success: false, error };
+    }
+  };
+
+  return {
+    withdrawals,
+    isLoading,
+    updateWithdrawalStatus,
+    refetch: fetchWithdrawals,
+  };
+          }
