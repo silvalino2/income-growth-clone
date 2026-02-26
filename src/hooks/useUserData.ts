@@ -63,6 +63,50 @@ export function useUserDeposits() {
 }
 
 // ----------------------------
+// User Stats Hook
+// ----------------------------
+export function useUserStats() {
+  const { user } = useAuth();
+  const [stats, setStats] = useState({
+    totalBalance: 0,
+    totalDeposit: 0,
+    totalWithdrawal: 0,
+    totalProfit: 0,
+  });
+  const [isLoading, setIsLoading] = useState(true);
+
+  const fetchStats = async () => {
+    if (!user) return;
+
+    try {
+      const { data: depositsData, error } = await supabase
+        .from('deposits')
+        .select('*')
+        .eq('user_id', user.id);
+
+      if (error) throw error;
+
+      const totalDeposit = depositsData?.reduce((sum, d) => sum + Number(d.amount), 0) || 0;
+      const totalWithdrawal = depositsData?.reduce((sum, d) => sum + Number(d.withdrawal_amount || 0), 0) || 0;
+      const totalProfit = depositsData?.reduce((sum, d) => sum + (Number(d.amount) * ((d.roi_percentage || 0) / 100)), 0) || 0;
+      const totalBalance = totalDeposit + totalProfit - totalWithdrawal;
+
+      setStats({ totalBalance, totalDeposit, totalWithdrawal, totalProfit });
+    } catch (error) {
+      console.error('Error fetching user stats:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchStats();
+  }, [user]);
+
+  return { stats, isLoading, refetch: fetchStats };
+}
+
+// ----------------------------
 // Investment Plans Hook
 // ----------------------------
 export function useInvestmentPlans() {
@@ -116,4 +160,4 @@ export function usePlatformWallets() {
   }, []);
 
   return { wallets, isLoading, refetch: fetchWallets };
-  }
+    }
