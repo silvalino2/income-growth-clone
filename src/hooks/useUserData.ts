@@ -63,7 +63,7 @@ export function useUserDeposits() {
 }
 
 // ----------------------------
-// User Investment Plans Hook
+// Investment Plans Hook
 // ----------------------------
 export function useInvestmentPlans() {
   const [plans, setPlans] = useState<InvestmentPlan[]>([]);
@@ -116,4 +116,4 @@ export function usePlatformWallets() {
   }, []);
 
   return { wallets, isLoading, refetch: fetchWallets };
-              }
+  }
