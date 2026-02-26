@@ -6,14 +6,86 @@ import { Tables } from '@/integrations/supabase/types';
 type DepositRow = Tables<'deposits'>;
 type InvestmentPlan = Tables<'investment_plans'>;
 type PlatformWallet = Tables<'platform_wallets'>;
+type WithdrawalRow = Tables<'withdrawals'>;
 
 interface DepositWithPlan extends DepositRow {
   plan_name?: string;
   roi_percentage?: number;
 }
 
+interface UserStats {
+  totalDeposits: number;
+  totalWithdrawals: number;
+  activeDeposits: number;
+  balance: number;
+}
+
 // ----------------------------
-// User Deposits Hook
+// User Stats Hook (FIXES DASHBOARD ERROR)
+// ----------------------------
+export function useUserStats() {
+  const { user } = useAuth();
+  const [stats, setStats] = useState<UserStats>({
+    totalDeposits: 0,
+    totalWithdrawals: 0,
+    activeDeposits: 0,
+    balance: 0,
+  });
+  const [isLoading, setIsLoading] = useState(true);
+
+  const fetchStats = async () => {
+    if (!user) return;
+
+    try {
+      // Fetch deposits
+      const { data: deposits, error: depositsError } = await supabase
+        .from('deposits')
+        .select('*')
+        .eq('user_id', user.id);
+
+      if (depositsError) throw depositsError;
+
+      // Fetch withdrawals
+      const { data: withdrawals, error: withdrawalsError } = await supabase
+        .from('withdrawals')
+        .select('*')
+        .eq('user_id', user.id);
+
+      if (withdrawalsError) throw withdrawalsError;
+
+      const totalDeposits =
+        deposits?.reduce((sum, d) => sum + Number(d.amount || 0), 0) || 0;
+
+      const totalWithdrawals =
+        withdrawals?.reduce((sum, w) => sum + Number(w.amount || 0), 0) || 0;
+
+      const activeDeposits =
+        deposits?.filter((d) => d.status === 'active').length || 0;
+
+      const balance = totalDeposits - totalWithdrawals;
+
+      setStats({
+        totalDeposits,
+        totalWithdrawals,
+        activeDeposits,
+        balance,
+      });
+    } catch (error) {
+      console.error('Error fetching user stats:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchStats();
+  }, [user]);
+
+  return { stats, isLoading, refetch: fetchStats };
+}
+
+// ----------------------------
+// User Deposits Hook (ADMIN EDIT REFLECTION)
 // ----------------------------
 export function useUserDeposits() {
   const { user } = useAuth();
@@ -36,16 +108,23 @@ export function useUserDeposits() {
         .from('investment_plans')
         .select('id, name, roi_percentage');
 
-      const plansMap = new Map(plansData?.map(p => [p.id, p]) || []);
+      const plansMap = new Map(
+        plansData?.map((p) => [p.id, p]) || []
+      );
 
-      const enrichedDeposits: DepositWithPlan[] = (depositsData || []).map(deposit => {
-        const plan = deposit.plan_id ? plansMap.get(deposit.plan_id) : null;
-        return {
-          ...deposit,
-          plan_name: plan?.name || 'N/A',
-          roi_percentage: plan?.roi_percentage || 0,
-        };
-      });
+      const enrichedDeposits: DepositWithPlan[] = (depositsData || []).map(
+        (deposit) => {
+          const plan = deposit.plan_id
+            ? plansMap.get(deposit.plan_id)
+            : null;
+
+          return {
+            ...deposit,
+            plan_name: plan?.name || 'N/A',
+            roi_percentage: plan?.roi_percentage || 0,
+          };
+        }
+      );
 
       setDeposits(enrichedDeposits);
     } catch (error) {
@@ -63,47 +142,38 @@ export function useUserDeposits() {
 }
 
 // ----------------------------
-// User Stats Hook
+// User Withdrawals Hook (FIXES VERCEL BUILD ERROR)
 // ----------------------------
-export function useUserStats() {
+export function useUserWithdrawals() {
   const { user } = useAuth();
-  const [stats, setStats] = useState({
-    totalBalance: 0,
-    totalDeposit: 0,
-    totalWithdrawal: 0,
-    totalProfit: 0,
-  });
+  const [withdrawals, setWithdrawals] = useState<WithdrawalRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  const fetchStats = async () => {
+  const fetchWithdrawals = async () => {
     if (!user) return;
 
     try {
-      const { data: depositsData, error } = await supabase
-        .from('deposits')
+      const { data, error } = await supabase
+        .from('withdrawals')
         .select('*')
-        .eq('user_id', user.id);
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false });
 
       if (error) throw error;
 
-      const totalDeposit = depositsData?.reduce((sum, d) => sum + Number(d.amount), 0) || 0;
-      const totalWithdrawal = depositsData?.reduce((sum, d) => sum + Number(d.withdrawal_amount || 0), 0) || 0;
-      const totalProfit = depositsData?.reduce((sum, d) => sum + (Number(d.amount) * ((d.roi_percentage || 0) / 100)), 0) || 0;
-      const totalBalance = totalDeposit + totalProfit - totalWithdrawal;
-
-      setStats({ totalBalance, totalDeposit, totalWithdrawal, totalProfit });
+      setWithdrawals(data || []);
     } catch (error) {
-      console.error('Error fetching user stats:', error);
+      console.error('Error fetching withdrawals:', error);
     } finally {
       setIsLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchStats();
+    fetchWithdrawals();
   }, [user]);
 
-  return { stats, isLoading, refetch: fetchStats };
+  return { withdrawals, isLoading, refetch: fetchWithdrawals };
 }
 
 // ----------------------------
@@ -145,7 +215,10 @@ export function usePlatformWallets() {
 
   const fetchWallets = async () => {
     try {
-      const { data, error } = await supabase.from('platform_wallets').select('*');
+      const { data, error } = await supabase
+        .from('platform_wallets')
+        .select('*');
+
       if (error) throw error;
       setWallets(data || []);
     } catch (error) {
@@ -160,4 +233,4 @@ export function usePlatformWallets() {
   }, []);
 
   return { wallets, isLoading, refetch: fetchWallets };
-    }
+        }
