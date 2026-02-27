@@ -433,3 +433,111 @@ export function useAdminWithdrawals() {
     refetch: fetchWithdrawals,
   };
                                                       }
+/* =========================================================
+   ADMIN PLANS
+========================================================= */
+
+export function useAdminPlans() {
+  const [plans, setPlans] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const isMounted = useRef(true);
+
+  const fetchPlans = useCallback(async () => {
+    try {
+      setIsLoading(true);
+
+      const { data, error } = await supabase
+        .from('investment_plans')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+
+      if (isMounted.current) {
+        setPlans(data || []);
+      }
+    } catch (error) {
+      console.error('Error fetching plans:', error);
+    } finally {
+      if (isMounted.current) setIsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    isMounted.current = true;
+    fetchPlans();
+
+    const channel = supabase
+      .channel('admin-plans-realtime')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'investment_plans' },
+        fetchPlans
+      )
+      .subscribe();
+
+    return () => {
+      isMounted.current = false;
+      supabase.removeChannel(channel);
+    };
+  }, [fetchPlans]);
+
+  const createPlan = async (planData: any) => {
+    try {
+      const { error } = await supabase
+        .from('investment_plans')
+        .insert([planData]);
+
+      if (error) throw error;
+
+      await fetchPlans();
+      return { success: true };
+    } catch (error) {
+      console.error('Error creating plan:', error);
+      return { success: false, error };
+    }
+  };
+
+  const updatePlan = async (id: string, updates: any) => {
+    try {
+      const { error } = await supabase
+        .from('investment_plans')
+        .update(updates)
+        .eq('id', id);
+
+      if (error) throw error;
+
+      await fetchPlans();
+      return { success: true };
+    } catch (error) {
+      console.error('Error updating plan:', error);
+      return { success: false, error };
+    }
+  };
+
+  const deletePlan = async (id: string) => {
+    try {
+      const { error } = await supabase
+        .from('investment_plans')
+        .delete()
+        .eq('id', id);
+
+      if (error) throw error;
+
+      await fetchPlans();
+      return { success: true };
+    } catch (error) {
+      console.error('Error deleting plan:', error);
+      return { success: false, error };
+    }
+  };
+
+  return {
+    plans,
+    isLoading,
+    createPlan,
+    updatePlan,
+    deletePlan,
+    refetch: fetchPlans,
+  };
+                            }
