@@ -13,52 +13,21 @@ const AdminDashboard = () => {
   const { user, isAdmin, authReady } = useAuth();
   const navigate = useNavigate();
 
-  /* -------------------------------------------------------
-     AUTH GUARD
-  ------------------------------------------------------- */
-
-  const isAllowed = useMemo(() => {
-    return authReady && !!user && isAdmin;
-  }, [authReady, user, isAdmin]);
+  // Auth + role guard
+  const isAllowed = useMemo(() => authReady && user && isAdmin === true, [authReady, user, isAdmin]);
 
   useEffect(() => {
     if (!authReady) return;
-
-    if (!user) {
-      navigate("/auth", { replace: true });
-      return;
-    }
-
-    if (!isAdmin) {
-      navigate("/dashboard", { replace: true });
-      return;
-    }
+    if (!user) navigate("/auth", { replace: true });
+    else if (isAdmin === false) navigate("/dashboard", { replace: true });
   }, [authReady, user, isAdmin, navigate]);
 
-  /* -------------------------------------------------------
-     ONLY FETCH IF ADMIN VERIFIED
-  ------------------------------------------------------- */
+  // Only fetch if admin verified
+  const { stats, isLoading: statsLoading } = useAdminStats(isAllowed);
+  const { data: users, isLoading: usersLoading } = useAdminUsers(isAllowed);
+  const { data: deposits, isLoading: depositsLoading } = useAdminDeposits(isAllowed);
 
-  const {
-    stats,
-    isLoading: statsLoading,
-  } = useAdminStats(isAllowed);
-
-  const {
-    data: users,
-    isLoading: usersLoading,
-  } = useAdminUsers(isAllowed);
-
-  const {
-    data: deposits,
-    isLoading: depositsLoading,
-  } = useAdminDeposits(isAllowed);
-
-  /* -------------------------------------------------------
-     LOADING STATE
-  ------------------------------------------------------- */
-
-  if (!authReady || !isAllowed) {
+  if (!authReady || !isAllowed || statsLoading || usersLoading || depositsLoading) {
     return (
       <AdminLayout>
         <div className="flex items-center justify-center h-64">
@@ -68,54 +37,27 @@ const AdminDashboard = () => {
     );
   }
 
-  if (statsLoading || usersLoading || depositsLoading) {
-    return (
-      <AdminLayout>
-        <div className="flex items-center justify-center h-64">
-          <div className="text-center">
-            <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-            <p className="text-muted-foreground">
-              Loading dashboard...
-            </p>
-          </div>
-        </div>
-      </AdminLayout>
-    );
-  }
-
-  /* -------------------------------------------------------
-     SAFE DATA
-  ------------------------------------------------------- */
-
   const recentUsers = users?.slice(0, 5) ?? [];
   const recentDeposits = deposits?.slice(0, 4) ?? [];
-
-  /* -------------------------------------------------------
-     RENDER
-  ------------------------------------------------------- */
 
   return (
     <AdminLayout>
       <div className="space-y-8">
         <h1 className="text-3xl font-bold">Admin Dashboard</h1>
 
-        {/* Stats */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
           <div className="dashboard-card">
             <p>Total Users</p>
             <p>{stats.totalUsers}</p>
           </div>
-
           <div className="dashboard-card">
             <p>Active Deposits</p>
             <p>${stats.activeDeposits}</p>
           </div>
-
           <div className="dashboard-card">
             <p>Total Withdrawals</p>
             <p>${stats.totalWithdrawals}</p>
           </div>
-
           <div className="dashboard-card">
             <p>Platform Profit</p>
             <p>${stats.totalProfit}</p>
@@ -125,7 +67,6 @@ const AdminDashboard = () => {
         {/* Recent Users */}
         <div className="dashboard-card">
           <h2 className="mb-4 font-semibold">Recent Users</h2>
-
           {recentUsers.length === 0 ? (
             <p>No users yet</p>
           ) : (
@@ -139,15 +80,11 @@ const AdminDashboard = () => {
                 </tr>
               </thead>
               <tbody>
-                {recentUsers.map((u) => (
+                {recentUsers.map(u => (
                   <tr key={u.id}>
                     <td>{u.full_name || "Unknown"}</td>
                     <td>{u.email}</td>
-                    <td>
-                      {u.created_at
-                        ? format(new Date(u.created_at), "yyyy-MM-dd")
-                        : "N/A"}
-                    </td>
+                    <td>{u.created_at ? format(new Date(u.created_at), "yyyy-MM-dd") : "N/A"}</td>
                     <td>${Number(u.balance || 0)}</td>
                   </tr>
                 ))}
@@ -159,7 +96,6 @@ const AdminDashboard = () => {
         {/* Recent Deposits */}
         <div className="dashboard-card">
           <h2 className="mb-4 font-semibold">Recent Deposits</h2>
-
           {recentDeposits.length === 0 ? (
             <p>No deposits yet</p>
           ) : (
@@ -173,16 +109,12 @@ const AdminDashboard = () => {
                 </tr>
               </thead>
               <tbody>
-                {recentDeposits.map((d) => (
+                {recentDeposits.map(d => (
                   <tr key={d.id}>
                     <td>{d.user_name}</td>
                     <td>${Number(d.amount)}</td>
                     <td>{d.plan_name}</td>
-                    <td>
-                      {d.created_at
-                        ? format(new Date(d.created_at), "yyyy-MM-dd")
-                        : "N/A"}
-                    </td>
+                    <td>{d.created_at ? format(new Date(d.created_at), "yyyy-MM-dd") : "N/A"}</td>
                   </tr>
                 ))}
               </tbody>
