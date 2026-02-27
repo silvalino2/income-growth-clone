@@ -1,11 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Tables } from '@/integrations/supabase/types';
 
 type Profile = Tables<'profiles'>;
 type DepositRow = Tables<'deposits'>;
 type WithdrawalRow = Tables<'withdrawals'>;
-type InvestmentPlan = Tables<'investment_plans'>;
 
 interface DepositWithDetails extends DepositRow {
   user_name?: string;
@@ -18,161 +17,213 @@ interface WithdrawalWithDetails extends WithdrawalRow {
   user_email?: string;
 }
 
-// ----------------------------
-// ADMIN STATS
-// ----------------------------
+/* =========================================================
+   ADMIN STATS
+========================================================= */
+
 export function useAdminStats() {
   const [stats, setStats] = useState({
     totalUsers: 0,
     activeDeposits: 0,
     totalWithdrawals: 0,
     platformRevenue: 0,
+    totalProfit: 0,
     newUsersToday: 0,
     activeInvestments: 0,
     pendingWithdrawals: 0,
   });
-  const [isLoading, setIsLoading] = useState(true);
 
-  const fetchStats = async () => {
+  const [isLoading, setIsLoading] = useState(true);
+  const isMounted = useRef(true);
+
+  const fetchStats = useCallback(async () => {
     try {
-      const { count: totalUsers } = await supabase
+      setIsLoading(true);
+
+      /* TOTAL USERS */
+      const { count: totalUsers, error: usersError } = await supabase
         .from('profiles')
         .select('*', { count: 'exact', head: true });
 
-      const { data: deposits } = await supabase
+      if (usersError) throw usersError;
+
+      /* DEPOSITS */
+      const { data: deposits, error: depositsError } = await supabase
         .from('deposits')
         .select('amount, status, profit, current_balance');
 
-      const activeDeposits =
-        deposits
-          ?.filter(d => d.status === 'confirmed')
-          .reduce((sum, d) => sum + Number(d.current_balance ?? d.amount ?? 0), 0) || 0;
+      if (depositsError) throw depositsError;
 
-      const { data: withdrawals } = await supabase
+      const confirmedDeposits = deposits?.filter(
+        (d) => d.status === 'confirmed'
+      ) || [];
+
+      const activeDeposits = confirmedDeposits.reduce(
+        (sum, d) =>
+          sum + Number(d.current_balance ?? d.amount ?? 0),
+        0
+      );
+
+      const totalProfit = confirmedDeposits.reduce(
+        (sum, d) => sum + Number(d.profit ?? 0),
+        0
+      );
+
+      /* WITHDRAWALS */
+      const { data: withdrawals, error: withdrawalsError } = await supabase
         .from('withdrawals')
         .select('amount, status');
 
-      const totalWithdrawals =
-        withdrawals
-          ?.filter(w => w.status === 'approved')
-          .reduce((sum, w) => sum + Number(w.amount ?? 0), 0) || 0;
+      if (withdrawalsError) throw withdrawalsError;
+
+      const approvedWithdrawals =
+        withdrawals?.filter((w) => w.status === 'approved') || [];
+
+      const totalWithdrawals = approvedWithdrawals.reduce(
+        (sum, w) => sum + Number(w.amount ?? 0),
+        0
+      );
 
       const pendingWithdrawals =
-        withdrawals?.filter(w => w.status === 'pending').length || 0;
+        withdrawals?.filter((w) => w.status === 'pending').length || 0;
 
+      /* NEW USERS TODAY */
       const today = new Date();
       today.setHours(0, 0, 0, 0);
 
-      const { count: newUsersToday } = await supabase
+      const { count: newUsersToday, error: todayError } = await supabase
         .from('profiles')
         .select('*', { count: 'exact', head: true })
         .gte('created_at', today.toISOString());
 
-      const activeInvestments =
-        deposits?.filter(d => d.status === 'confirmed').length || 0;
+      if (todayError) throw todayError;
 
-      const platformRevenue = activeDeposits * 0.1;
+      const activeInvestments = confirmedDeposits.length;
 
-      setStats({
-        totalUsers: totalUsers || 0,
-        activeDeposits,
-        totalWithdrawals,
-        platformRevenue,
-        newUsersToday: newUsersToday || 0,
-        activeInvestments,
-        pendingWithdrawals,
-      });
+      const platformRevenue = totalProfit * 0.1;
+
+      if (isMounted.current) {
+        setStats({
+          totalUsers: totalUsers || 0,
+          activeDeposits,
+          totalWithdrawals,
+          platformRevenue,
+          totalProfit,
+          newUsersToday: newUsersToday || 0,
+          activeInvestments,
+          pendingWithdrawals,
+        });
+      }
     } catch (error) {
       console.error('Error fetching admin stats:', error);
     } finally {
-      setIsLoading(false);
+      if (isMounted.current) {
+        setIsLoading(false);
+      }
     }
-  };
+  }, []);
 
   useEffect(() => {
+    isMounted.current = true;
     fetchStats();
-  }, []);
+    return () => {
+      isMounted.current = false;
+    };
+  }, [fetchStats]);
 
   return { stats, isLoading, refetch: fetchStats };
 }
 
-// ----------------------------
-// ADMIN USERS
-// ----------------------------
+/* =========================================================
+   ADMIN USERS
+========================================================= */
+
 export function useAdminUsers() {
   const [users, setUsers] = useState<Profile[]>([]);
   const [userDeposits, setUserDeposits] = useState<Record<string, number>>({});
   const [userWithdrawals, setUserWithdrawals] = useState<Record<string, number>>({});
   const [isLoading, setIsLoading] = useState(true);
+  const isMounted = useRef(true);
 
-  const fetchUsers = async () => {
+  const fetchUsers = useCallback(async () => {
     try {
-      const { data } = await supabase
+      setIsLoading(true);
+
+      const { data: profiles, error: profilesError } = await supabase
         .from('profiles')
         .select('*')
         .order('created_at', { ascending: false });
 
-      setUsers(data || []);
+      if (profilesError) throw profilesError;
 
-      const { data: deposits } = await supabase
+      const { data: deposits, error: depositsError } = await supabase
         .from('deposits')
         .select('user_id, amount, status, current_balance');
 
+      if (depositsError) throw depositsError;
+
+      const { data: withdrawals, error: withdrawalsError } = await supabase
+        .from('withdrawals')
+        .select('user_id, amount, status');
+
+      if (withdrawalsError) throw withdrawalsError;
+
       const depositsMap: Record<string, number> = {};
-      deposits?.forEach(d => {
+      deposits?.forEach((d) => {
         if (d.status === 'confirmed') {
           depositsMap[d.user_id] =
             (depositsMap[d.user_id] || 0) +
             Number(d.current_balance ?? d.amount ?? 0);
         }
       });
-      setUserDeposits(depositsMap);
-
-      const { data: withdrawals } = await supabase
-        .from('withdrawals')
-        .select('user_id, amount, status');
 
       const withdrawalsMap: Record<string, number> = {};
-      withdrawals?.forEach(w => {
+      withdrawals?.forEach((w) => {
         if (w.status === 'approved') {
           withdrawalsMap[w.user_id] =
             (withdrawalsMap[w.user_id] || 0) +
             Number(w.amount ?? 0);
         }
       });
-      setUserWithdrawals(withdrawalsMap);
+
+      if (isMounted.current) {
+        setUsers(profiles || []);
+        setUserDeposits(depositsMap);
+        setUserWithdrawals(withdrawalsMap);
+      }
     } catch (error) {
       console.error('Error fetching users:', error);
     } finally {
-      setIsLoading(false);
+      if (isMounted.current) setIsLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
+    isMounted.current = true;
     fetchUsers();
 
     const channel = supabase
       .channel('admin-users-realtime')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'deposits' },
-        () => fetchUsers()
-      )
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'deposits' }, fetchUsers)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'withdrawals' }, fetchUsers)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, fetchUsers)
       .subscribe();
 
     return () => {
+      isMounted.current = false;
       supabase.removeChannel(channel);
     };
-  }, []);
+  }, [fetchUsers]);
 
   const updateUserStatus = async (userId: string, status: string) => {
     try {
       const { error } = await supabase
         .from('profiles')
         .update({ status })
-        .eq('user_id', userId);
+        .eq('id', userId); // ✅ safer primary key usage
 
       if (error) throw error;
+
       await fetchUsers();
       return { success: true };
     } catch (error) {
@@ -191,37 +242,43 @@ export function useAdminUsers() {
   };
 }
 
-// ----------------------------
-// ADMIN DEPOSITS (Reflects to user dashboard)
-// ----------------------------
+/* =========================================================
+   ADMIN DEPOSITS
+========================================================= */
+
 export function useAdminDeposits() {
   const [deposits, setDeposits] = useState<DepositWithDetails[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const isMounted = useRef(true);
 
-  const fetchDeposits = async () => {
+  const fetchDeposits = useCallback(async () => {
     try {
-      const { data: depositsData } = await supabase
+      setIsLoading(true);
+
+      const { data: depositsData, error: depositsError } = await supabase
         .from('deposits')
         .select('*')
         .order('created_at', { ascending: false });
 
-      const { data: profilesData } = await supabase
-        .from('profiles')
-        .select('user_id, full_name, email');
+      if (depositsError) throw depositsError;
 
-      const { data: plansData } = await supabase
+      const { data: profilesData, error: profilesError } = await supabase
+        .from('profiles')
+        .select('id, full_name, email');
+
+      if (profilesError) throw profilesError;
+
+      const { data: plansData, error: plansError } = await supabase
         .from('investment_plans')
         .select('id, name');
 
-      const profilesMap = new Map(
-        profilesData?.map(p => [p.user_id, p]) || []
-      );
-      const plansMap = new Map(
-        plansData?.map(p => [p.id, p]) || []
-      );
+      if (plansError) throw plansError;
+
+      const profilesMap = new Map(profilesData?.map((p) => [p.id, p]) || []);
+      const plansMap = new Map(plansData?.map((p) => [p.id, p]) || []);
 
       const enrichedDeposits: DepositWithDetails[] =
-        (depositsData || []).map(d => {
+        depositsData?.map((d) => {
           const profile = profilesMap.get(d.user_id);
           const plan = d.plan_id ? plansMap.get(d.plan_id) : null;
 
@@ -231,32 +288,23 @@ export function useAdminDeposits() {
             user_email: profile?.email || 'Unknown',
             plan_name: plan?.name || 'N/A',
           };
-        });
+        }) || [];
 
-      setDeposits(enrichedDeposits);
+      if (isMounted.current) setDeposits(enrichedDeposits);
     } catch (error) {
       console.error('Error fetching deposits:', error);
     } finally {
-      setIsLoading(false);
+      if (isMounted.current) setIsLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
+    isMounted.current = true;
     fetchDeposits();
-
-    const channel = supabase
-      .channel('admin-deposits-realtime')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'deposits' },
-        fetchDeposits
-      )
-      .subscribe();
-
     return () => {
-      supabase.removeChannel(channel);
+      isMounted.current = false;
     };
-  }, []);
+  }, [fetchDeposits]);
 
   const updateDepositStatus = async (depositId: string, status: string) => {
     try {
@@ -282,87 +330,4 @@ export function useAdminDeposits() {
   };
 
   return { deposits, isLoading, updateDepositStatus, refetch: fetchDeposits };
-}
-
-// ----------------------------
-// 🚨 THIS WAS MISSING (CAUSE OF YOUR CURRENT VERCEL ERROR)
-// ADMIN WITHDRAWALS
-// ----------------------------
-export function useAdminWithdrawals() {
-  const [withdrawals, setWithdrawals] = useState<WithdrawalWithDetails[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-
-  const fetchWithdrawals = async () => {
-    try {
-      const { data: withdrawalsData } = await supabase
-        .from('withdrawals')
-        .select('*')
-        .order('created_at', { ascending: false });
-
-      const { data: profilesData } = await supabase
-        .from('profiles')
-        .select('user_id, full_name, email');
-
-      const profilesMap = new Map(
-        profilesData?.map(p => [p.user_id, p]) || []
-      );
-
-      const enriched: WithdrawalWithDetails[] =
-        (withdrawalsData || []).map(w => {
-          const profile = profilesMap.get(w.user_id);
-          return {
-            ...w,
-            user_name: profile?.full_name || 'Unknown',
-            user_email: profile?.email || 'Unknown',
-          };
-        });
-
-      setWithdrawals(enriched);
-    } catch (error) {
-      console.error('Error fetching withdrawals:', error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchWithdrawals();
-
-    const channel = supabase
-      .channel('admin-withdrawals-realtime')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'withdrawals' },
-        fetchWithdrawals
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, []);
-
-  const updateWithdrawalStatus = async (withdrawalId: string, status: string) => {
-    try {
-      const { error } = await supabase
-        .from('withdrawals')
-        .update({ status })
-        .eq('id', withdrawalId);
-
-      if (error) throw error;
-
-      await fetchWithdrawals();
-      return { success: true };
-    } catch (error) {
-      console.error('Error updating withdrawal status:', error);
-      return { success: false, error };
-    }
-  };
-
-  return {
-    withdrawals,
-    isLoading,
-    updateWithdrawalStatus,
-    refetch: fetchWithdrawals,
-  };
           }
