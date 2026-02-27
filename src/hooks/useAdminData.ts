@@ -330,4 +330,106 @@ export function useAdminDeposits() {
   };
 
   return { deposits, isLoading, updateDepositStatus, refetch: fetchDeposits };
-          }
+}
+
+/* =========================================================
+   ADMIN WITHDRAWALS
+========================================================= */
+
+export function useAdminWithdrawals() {
+  const [withdrawals, setWithdrawals] = useState<WithdrawalWithDetails[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const isMounted = useRef(true);
+
+  const fetchWithdrawals = useCallback(async () => {
+    try {
+      setIsLoading(true);
+
+      const { data: withdrawalsData, error: withdrawalsError } = await supabase
+        .from('withdrawals')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (withdrawalsError) throw withdrawalsError;
+
+      const { data: profilesData, error: profilesError } = await supabase
+        .from('profiles')
+        .select('id, full_name, email');
+
+      if (profilesError) throw profilesError;
+
+      const profilesMap = new Map(
+        profilesData?.map((p) => [p.id, p]) || []
+      );
+
+      const enrichedWithdrawals: WithdrawalWithDetails[] =
+        withdrawalsData?.map((w) => {
+          const profile = profilesMap.get(w.user_id);
+
+          return {
+            ...w,
+            user_name: profile?.full_name || 'Unknown',
+            user_email: profile?.email || 'Unknown',
+          };
+        }) || [];
+
+      if (isMounted.current) setWithdrawals(enrichedWithdrawals);
+    } catch (error) {
+      console.error('Error fetching withdrawals:', error);
+    } finally {
+      if (isMounted.current) setIsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    isMounted.current = true;
+    fetchWithdrawals();
+
+    const channel = supabase
+      .channel('admin-withdrawals-realtime')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'withdrawals' },
+        fetchWithdrawals
+      )
+      .subscribe();
+
+    return () => {
+      isMounted.current = false;
+      supabase.removeChannel(channel);
+    };
+  }, [fetchWithdrawals]);
+
+  const updateWithdrawalStatus = async (
+    withdrawalId: string,
+    status: string
+  ) => {
+    try {
+      const updateData: { status: string; approved_at?: string } = { status };
+
+      if (status === 'approved') {
+        updateData.approved_at = new Date().toISOString();
+      }
+
+      const { error } = await supabase
+        .from('withdrawals')
+        .update(updateData)
+        .eq('id', withdrawalId);
+
+      if (error) throw error;
+
+      await fetchWithdrawals();
+      return { success: true };
+    } catch (error) {
+      console.error('Error updating withdrawal status:', error);
+      return { success: false, error };
+    }
+  };
+
+  return {
+    withdrawals,
+    isLoading,
+    updateWithdrawalStatus,
+    refetch: fetchWithdrawals,
+  };
+                                                      }
