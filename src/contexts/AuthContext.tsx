@@ -21,24 +21,25 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   useEffect(() => {
     const session = supabase.auth.session();
     if (session?.user) setUser(session.user);
+    setAuthReady(true);
 
-    const { data: listener } = supabase.auth.onAuthStateChange(async (_event, session) => {
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
       if (session?.user) setUser(session.user);
       else setUser(null);
+      setAuthReady(true);
     });
 
     return () => listener?.unsubscribe();
   }, []);
 
-  // Fetch profile and determine admin role
+  // Fetch role after user loads
   useEffect(() => {
-    const fetchProfile = async () => {
-      if (!user) {
-        setIsAdmin(null);
-        setAuthReady(true);
-        return;
-      }
+    if (!user) {
+      setIsAdmin(null);
+      return;
+    }
 
+    const fetchRole = async () => {
       try {
         const { data: profile } = await supabase
           .from("profiles")
@@ -46,17 +47,14 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
           .eq("id", user.id)
           .single();
 
-        if (profile?.role === "admin") setIsAdmin(true);
-        else setIsAdmin(false);
+        setIsAdmin(profile?.role === "admin");
       } catch (err) {
-        console.error("AuthContext fetchProfile error:", err);
+        console.error("AuthContext fetchRole error:", err);
         setIsAdmin(false);
-      } finally {
-        setAuthReady(true);
       }
     };
 
-    fetchProfile();
+    fetchRole();
   }, [user]);
 
   return (
