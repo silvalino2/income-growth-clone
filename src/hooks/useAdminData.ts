@@ -541,3 +541,71 @@ export function useAdminPlans() {
     refetch: fetchPlans,
   };
                             }
+
+/* =========================================================
+   PLATFORM SETTINGS
+========================================================= */
+
+export function usePlatformSettings() {
+  const [settings, setSettings] = useState<any>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const isMounted = useRef(true);
+
+  const fetchSettings = useCallback(async () => {
+    try {
+      setIsLoading(true);
+
+      // assuming you have a single-row settings table
+      const { data, error } = await supabase
+        .from('platform_settings')
+        .select('*')
+        .single();
+
+      if (error && error.code !== 'PGRST116') throw error;
+
+      if (isMounted.current) {
+        setSettings(data);
+      }
+    } catch (error) {
+      console.error('Error fetching platform settings:', error);
+    } finally {
+      if (isMounted.current) setIsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    isMounted.current = true;
+    fetchSettings();
+    return () => {
+      isMounted.current = false;
+    };
+  }, [fetchSettings]);
+
+  const updateSettings = async (updates: any) => {
+    try {
+      if (!settings?.id) {
+        return { success: false, error: "Settings record not found" };
+      }
+
+      const { error } = await supabase
+        .from('platform_settings')
+        .update(updates)
+        .eq('id', settings.id);
+
+      if (error) throw error;
+
+      await fetchSettings();
+      return { success: true };
+    } catch (error) {
+      console.error('Error updating platform settings:', error);
+      return { success: false, error };
+    }
+  };
+
+  return {
+    settings,
+    isLoading,
+    updateSettings,
+    refetch: fetchSettings,
+  };
+                }
