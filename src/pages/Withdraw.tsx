@@ -15,7 +15,7 @@ const Withdraw = () => {
   const [address, setAddress] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const availableBalance = stats.totalBalance;
+  const availableBalance = stats.balance;
 
   const handleWithdraw = async (e: React.FormEvent) => {
     e.preventDefault();
