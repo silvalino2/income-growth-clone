@@ -7,10 +7,23 @@ import { useAuth } from "@/contexts/AuthContext";
 const Referrals = () => {
   const { profile } = useAuth();
   const referralCode = profile?.referral_code || "REF-CODE";
-  const referralLink = `${window.location.origin}/auth?mode=register&ref=${referralCode}`;
+  const [referralLink, setReferralLink] = React.useState<string>(
+    ""
+  );
+
+  // build link on client only
+  React.useEffect(() => {
+    if (typeof window !== "undefined") {
+      setReferralLink(
+        `${window.location.origin}/auth?mode=register&ref=${referralCode}`
+      );
+    }
+  }, [referralCode]);
 
   const copyToClipboard = (text: string, label: string) => {
-    navigator.clipboard.writeText(text);
+    if (typeof navigator !== "undefined" && navigator.clipboard) {
+      navigator.clipboard.writeText(text);
+    }
     toast.success(`${label} copied to clipboard!`);
   };
 
