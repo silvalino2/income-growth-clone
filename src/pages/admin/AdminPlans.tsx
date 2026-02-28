@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useAuth } from "@/contexts/AuthContext";
 import AdminLayout from "@/components/admin/AdminLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -7,7 +8,10 @@ import { toast } from "sonner";
 import { useAdminPlans } from "@/hooks/useAdminData";
 
 const AdminPlans = () => {
-  const { plans, isLoading, updatePlan, deletePlan, createPlan } = useAdminPlans();
+  const { user, isAdmin, authReady } = useAuth();
+  const isAllowed = authReady && user && isAdmin === true;
+
+  const { plans, isLoading, updatePlan, deletePlan, createPlan } = useAdminPlans(isAllowed);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editedPlan, setEditedPlan] = useState<{
     name: string;
