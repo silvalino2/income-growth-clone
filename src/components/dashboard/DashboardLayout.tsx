@@ -33,15 +33,15 @@ const menuItems = [
 const DashboardLayout = ({ children }: DashboardLayoutProps) => {
   const location = useLocation();
   const navigate = useNavigate();
-  const { user, profile, isLoading, signOut } = useAuth();
+  const { user, profile, authReady, isLoading, signOut } = useAuth();
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
-  // Redirect if not logged in
+  // Redirect if not logged in after auth has initialized
   useEffect(() => {
-    if (!isLoading && !user) {
+    if (authReady && !user) {
       navigate("/auth");
     }
-  }, [user, isLoading, navigate]);
+  }, [user, authReady, navigate]);
 
   const handleLogout = async () => {
     await signOut();
@@ -49,7 +49,7 @@ const DashboardLayout = ({ children }: DashboardLayoutProps) => {
     navigate("/");
   };
 
-  if (isLoading) {
+  if (!authReady || isLoading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="text-center">
