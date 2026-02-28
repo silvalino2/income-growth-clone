@@ -134,7 +134,7 @@ export function useAdminDeposits() {
     );
     const activeDeposits = userDeposits.filter((d) => d.status === "active")
       .length;
-    const balance = totalDeposits; // Can adjust if considering withdrawals separately
+    const balance = totalDeposits; // Adjust if considering withdrawals separately
     return { totalDeposits, activeDeposits, balance };
   };
 
@@ -218,14 +218,14 @@ export function usePlatformSettings() {
         .from("platform_settings")
         .select("*")
         .single();
-    if (error) throw error;
-    setSettings(data || null);
-  } catch (err) {
-    console.error("Error fetching platform settings:", err);
-    setSettings(null);
-  } finally {
-    setIsLoading(false);
-  }
+      if (error) throw error;
+      setSettings(data || null);
+    } catch (err) {
+      console.error("Error fetching platform settings:", err);
+      setSettings(null);
+    } finally {
+      setIsLoading(false);
+    }
   }, []);
 
   useEffect(() => {
@@ -286,3 +286,4 @@ export const useAdminPlans = useAdminInvestmentPlans;
 export const useAdminUsersLegacy = useAdminUsers;
 export const useAdminDepositsLegacy = useAdminDeposits;
 export const useAdminWithdrawalsLegacy = useAdminWithdrawals;
+export const useAdminSettingsLegacy = usePlatformSettings;
