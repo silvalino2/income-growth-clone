@@ -6,10 +6,14 @@ import { Switch } from "@/components/ui/switch";
 import { Settings, Globe, Wallet, Save, Shield } from "lucide-react";
 import { toast } from "sonner";
 import { useState, useEffect } from "react";
+import { useAuth } from "@/contexts/AuthContext";
 import { usePlatformSettings } from "@/hooks/useAdminData";
 
 const AdminSettings = () => {
-  const { settings: platformSettings, isLoading, updateSetting } = usePlatformSettings();
+  const { user, isAdmin, authReady } = useAuth();
+  const isAllowed = authReady && user && isAdmin === true;
+
+  const { settings: platformSettings, isLoading, updateSetting } = usePlatformSettings(isAllowed);
   
   const [settings, setSettings] = useState({
     siteName: "INCOME-GROWTH.ORG",
