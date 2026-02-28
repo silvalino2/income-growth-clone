@@ -11,7 +11,7 @@ import {
   Menu,
   X,
   Bell,
-  Shield
+  Shield,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
