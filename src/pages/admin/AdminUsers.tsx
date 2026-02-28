@@ -15,11 +15,15 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
 import { useState } from "react";
+import { useAuth } from "@/contexts/AuthContext";
 import { useAdminUsers } from "@/hooks/useAdminData";
 import { format } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
 
 const AdminUsers = () => {
+  const { user, isAdmin, authReady } = useAuth();
+  const isAllowed = authReady && user && isAdmin === true;
+
   const {
     users,
     userDeposits,
@@ -27,7 +31,7 @@ const AdminUsers = () => {
     isLoading,
     updateUserStatus,
     refetch,
-  } = useAdminUsers();
+  } = useAdminUsers(isAllowed);
 
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
