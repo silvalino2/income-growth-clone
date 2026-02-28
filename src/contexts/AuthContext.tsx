@@ -31,20 +31,33 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   // Listen for auth changes
   useEffect(() => {
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (session?.user) {
-        setUser(session.user);
-        setIsAdmin(session.user.email === ADMIN_EMAIL);
-      } else {
-        setUser(null);
-        setIsAdmin(false);
-      }
+  const getSession = async () => {
+    const { data } = await supabase.auth.getSession();
 
-      setAuthReady(true);
-    });
+    if (data.session?.user) {
+      setUser(data.session.user);
+      setIsAdmin(data.session.user.email === ADMIN_EMAIL);
+    }
 
-    return () => listener.subscription.unsubscribe();
-  }, []);
+    setAuthReady(true);
+  };
+
+  getSession();
+
+  const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+    if (session?.user) {
+      setUser(session.user);
+      setIsAdmin(session.user.email === ADMIN_EMAIL);
+    } else {
+      setUser(null);
+      setIsAdmin(false);
+    }
+
+    setAuthReady(true);
+  });
+
+  return () => listener.subscription.unsubscribe();
+}, []);
 
   const signIn = async (email: string, password: string) => {
     setIsLoading(true);
