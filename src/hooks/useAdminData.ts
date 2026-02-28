@@ -32,7 +32,7 @@ interface UserStats {
 }
 
 // ----------------------------
-// Fetch All Users
+// Fetch All Users (Server-side via API)
 // ----------------------------
 export function useAdminUsers() {
   const [users, setUsers] = useState<UserProfile[]>([]);
@@ -41,8 +41,8 @@ export function useAdminUsers() {
   const fetchUsers = useCallback(async () => {
     setIsLoading(true);
     try {
-      const { data, error } = await supabase.from("profiles").select("*");
-      if (error) throw error;
+      const res = await fetch("/api/admin/users");
+      const data: UserProfile[] = await res.json();
       setUsers(data || []);
     } catch (err) {
       console.error("Error fetching users:", err);
@@ -66,7 +66,7 @@ export function useAdminUsers() {
         .update({ balance: newBalance })
         .eq("id", userId);
       if (error) throw error;
-      await fetchUsers(); // Refresh after update
+      await fetchUsers();
       return { success: true };
     } catch (err) {
       console.error("Error updating user balance:", err);
@@ -134,7 +134,7 @@ export function useAdminDeposits() {
     );
     const activeDeposits = userDeposits.filter((d) => d.status === "active")
       .length;
-    const balance = totalDeposits; // Adjust if considering withdrawals separately
+    const balance = totalDeposits;
     return { totalDeposits, activeDeposits, balance };
   };
 
@@ -286,4 +286,4 @@ export const useAdminPlans = useAdminInvestmentPlans;
 export const useAdminUsersLegacy = useAdminUsers;
 export const useAdminDepositsLegacy = useAdminDeposits;
 export const useAdminWithdrawalsLegacy = useAdminWithdrawals;
-export const useAdminSettingsLegacy = usePlatformSettings;
+export const usePlatformSettingsLegacy = usePlatformSettings;
