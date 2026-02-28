@@ -33,7 +33,7 @@ export function useUserStats() {
   });
   const [isLoading, setIsLoading] = useState(true);
 
-  const fetchStats = async () => {
+  const fetchStats = useCallback(async () => {
     if (!user) return;
 
     try {
@@ -75,11 +75,11 @@ export function useUserStats() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [user]);
 
   useEffect(() => {
     fetchStats();
-  }, [user]);
+  }, [fetchStats]);
 
   return { stats, isLoading, refetch: fetchStats };
 }
@@ -138,7 +138,30 @@ export function useUserDeposits() {
     fetchDeposits();
   }, [user]);
 
-  return { deposits, isLoading, refetch: fetchDeposits };
+  const createDeposit = async (
+    planId: string,
+    amount: number,
+    method: string
+  ) => {
+    if (!user) return { success: false, error: 'not authenticated' };
+    try {
+      const { error } = await supabase.from('deposits').insert({
+        user_id: user.id,
+        plan_id: planId,
+        amount,
+        method,
+        status: 'pending',
+      });
+      if (error) throw error;
+      await fetchDeposits();
+      return { success: true, error: null };
+    } catch (err) {
+      console.error('createDeposit error:', err);
+      return { success: false, error: err };
+    }
+  };
+
+  return { deposits, isLoading, refetch: fetchDeposits, createDeposit };
 }
 
 // ----------------------------
@@ -173,7 +196,30 @@ export function useUserWithdrawals() {
     fetchWithdrawals();
   }, [user]);
 
-  return { withdrawals, isLoading, refetch: fetchWithdrawals };
+  const createWithdrawal = async (
+    amount: number,
+    address: string,
+    method: string
+  ) => {
+    if (!user) return { success: false, error: 'not authenticated' };
+    try {
+      const { error } = await supabase.from('withdrawals').insert({
+        user_id: user.id,
+        amount,
+        address,
+        method,
+        status: 'pending',
+      });
+      if (error) throw error;
+      await fetchWithdrawals();
+      return { success: true, error: null };
+    } catch (err) {
+      console.error('createWithdrawal error:', err);
+      return { success: false, error: err };
+    }
+  };
+
+  return { withdrawals, isLoading, refetch: fetchWithdrawals, createWithdrawal };
 }
 
 // ----------------------------
