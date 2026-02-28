@@ -32,20 +32,27 @@ const menuItems = [
 const AdminLayout = ({ children }: AdminLayoutProps) => {
   const location = useLocation();
   const navigate = useNavigate();
-  const { user, isAdmin, isLoading, signOut } = useAuth();
+  const { user, isAdmin, authReady, isLoading, signOut } = useAuth();
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
-  // Redirect if not logged in or not admin
+  // Redirect if not logged in or not admin after authReady
   useEffect(() => {
-    if (!isLoading) {
-      if (!user) {
-        navigate("/auth");
-      } else if (!isAdmin) {
-        toast.error("Access denied. Admin privileges required.");
-        navigate("/dashboard");
-      }
+    if (!authReady) return;
+    if (!user) {
+      navigate("/auth");
+    } else if (isAdmin === false) {
+      toast.error("Access denied. Admin privileges required.");
+      navigate("/dashboard");
     }
-  }, [user, isAdmin, isLoading, navigate]);
+  }, [user, isAdmin, authReady, navigate]);
+
+  const handleLogout = async () => {
+    await signOut();
+    toast.success("Logged out successfully");
+    navigate("/");
+  };
+
+  if (!authReady || isLoading) {
 
   const handleLogout = async () => {
     await signOut();
