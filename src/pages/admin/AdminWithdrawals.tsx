@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useAuth } from "@/contexts/AuthContext";
 import AdminLayout from "@/components/admin/AdminLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,7 +15,10 @@ import { useAdminWithdrawals } from "@/hooks/useAdminData";
 import { format } from "date-fns";
 
 const AdminWithdrawals = () => {
-  const { withdrawals, isLoading, updateWithdrawalStatus } = useAdminWithdrawals();
+  const { user, isAdmin, authReady } = useAuth();
+  const isAllowed = authReady && user && isAdmin === true;
+
+  const { withdrawals, isLoading, updateWithdrawalStatus } = useAdminWithdrawals(isAllowed);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
 
@@ -178,7 +182,9 @@ const AdminWithdrawals = () => {
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end" className="bg-card border-border">
                             <DropdownMenuItem onClick={() => {
-                              navigator.clipboard.writeText(withdrawal.wallet_address);
+                              if (typeof navigator !== 'undefined' && navigator.clipboard) {
+                                navigator.clipboard.writeText(withdrawal.wallet_address);
+                              }
                               toast.success("Address copied!");
                             }}>
                               <Eye className="w-4 h-4 mr-2" />
