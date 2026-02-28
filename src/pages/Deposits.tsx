@@ -10,6 +10,13 @@ const Deposits = () => {
   const activeDeposits = deposits.filter(d => d.status === 'confirmed');
   const pendingDeposits = deposits.filter(d => d.status === 'pending');
 
+  const totalProfit = deposits.reduce((sum, d) => {
+    if (d.status === 'confirmed') {
+      return sum + Number(d.amount) * ((d.roi_percentage || 0) / 100);
+    }
+    return sum;
+  }, 0);
+
   if (isLoading) {
     return (
       <DashboardLayout>
@@ -40,7 +47,7 @@ const Deposits = () => {
               </div>
               <div>
                 <p className="text-muted-foreground text-sm">Total Deposited</p>
-                <p className="text-2xl font-heading font-bold">${stats.totalDeposit.toFixed(2)}</p>
+                <p className="text-2xl font-heading font-bold">${stats.totalDeposits.toFixed(2)}</p>
               </div>
             </div>
           </div>
@@ -62,7 +69,7 @@ const Deposits = () => {
               </div>
               <div>
                 <p className="text-muted-foreground text-sm">Total Profit</p>
-                <p className="text-2xl font-heading font-bold">${stats.totalProfit.toFixed(2)}</p>
+                <p className="text-2xl font-heading font-bold">${totalProfit.toFixed(2)}</p>
               </div>
             </div>
           </div>
