@@ -1,5 +1,5 @@
 // src/hooks/useAdminData.ts
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Tables } from "@/integrations/supabase/types";
 
@@ -25,6 +25,12 @@ interface AdminStats {
   totalBalance: number;
 }
 
+interface UserStats {
+  totalDeposits: number;
+  activeDeposits: number;
+  balance: number;
+}
+
 // ----------------------------
 // Fetch All Users
 // ----------------------------
@@ -32,7 +38,7 @@ export function useAdminUsers() {
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  const fetchUsers = async () => {
+  const fetchUsers = useCallback(async () => {
     setIsLoading(true);
     try {
       const { data, error } = await supabase.from("profiles").select("*");
@@ -44,13 +50,31 @@ export function useAdminUsers() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     fetchUsers();
-  }, []);
+  }, [fetchUsers]);
 
-  return { users, isLoading, refetch: fetchUsers };
+  // ----------------------------
+  // Update User Balance
+  // ----------------------------
+  const updateUserBalance = async (userId: string, newBalance: number) => {
+    try {
+      const { error } = await supabase
+        .from("profiles")
+        .update({ balance: newBalance })
+        .eq("id", userId);
+      if (error) throw error;
+      await fetchUsers(); // Refresh after update
+      return { success: true };
+    } catch (err) {
+      console.error("Error updating user balance:", err);
+      return { success: false, error: err };
+    }
+  };
+
+  return { users, isLoading, refetch: fetchUsers, updateUserBalance };
 }
 
 // ----------------------------
@@ -60,7 +84,7 @@ export function useAdminDeposits() {
   const [deposits, setDeposits] = useState<DepositWithPlan[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  const fetchDeposits = async () => {
+  const fetchDeposits = useCallback(async () => {
     setIsLoading(true);
     try {
       const { data: depositsData, error } = await supabase
@@ -93,13 +117,28 @@ export function useAdminDeposits() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     fetchDeposits();
-  }, []);
+  }, [fetchDeposits]);
 
-  return { deposits, isLoading, refetch: fetchDeposits };
+  // ----------------------------
+  // Compute per-user stats
+  // ----------------------------
+  const getUserStats = (userId: string): UserStats => {
+    const userDeposits = deposits.filter((d) => d.user_id === userId);
+    const totalDeposits = userDeposits.reduce(
+      (sum, d) => sum + Number(d.amount || 0),
+      0
+    );
+    const activeDeposits = userDeposits.filter((d) => d.status === "active")
+      .length;
+    const balance = totalDeposits; // Can adjust if considering withdrawals separately
+    return { totalDeposits, activeDeposits, balance };
+  };
+
+  return { deposits, isLoading, refetch: fetchDeposits, getUserStats };
 }
 
 // ----------------------------
@@ -109,7 +148,7 @@ export function useAdminWithdrawals() {
   const [withdrawals, setWithdrawals] = useState<WithdrawalRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  const fetchWithdrawals = async () => {
+  const fetchWithdrawals = useCallback(async () => {
     setIsLoading(true);
     try {
       const { data, error } = await supabase
@@ -125,11 +164,11 @@ export function useAdminWithdrawals() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     fetchWithdrawals();
-  }, []);
+  }, [fetchWithdrawals]);
 
   return { withdrawals, isLoading, refetch: fetchWithdrawals };
 }
@@ -141,7 +180,7 @@ export function useAdminInvestmentPlans() {
   const [plans, setPlans] = useState<InvestmentPlan[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  const fetchPlans = async () => {
+  const fetchPlans = useCallback(async () => {
     setIsLoading(true);
     try {
       const { data, error } = await supabase
@@ -149,7 +188,6 @@ export function useAdminInvestmentPlans() {
         .select("*")
         .order("min_amount", { ascending: true });
       if (error) throw error;
-
       setPlans(data || []);
     } catch (err) {
       console.error("Error fetching investment plans:", err);
@@ -157,11 +195,11 @@ export function useAdminInvestmentPlans() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     fetchPlans();
-  }, []);
+  }, [fetchPlans]);
 
   return { plans, isLoading, refetch: fetchPlans };
 }
@@ -173,27 +211,26 @@ export function usePlatformSettings() {
   const [settings, setSettings] = useState<PlatformSettingsRow | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  const fetchSettings = async () => {
+  const fetchSettings = useCallback(async () => {
     setIsLoading(true);
     try {
       const { data, error } = await supabase
         .from("platform_settings")
         .select("*")
         .single();
-      if (error) throw error;
-
-      setSettings(data || null);
-    } catch (err) {
-      console.error("Error fetching platform settings:", err);
-      setSettings(null);
-    } finally {
-      setIsLoading(false);
-    }
-  };
+    if (error) throw error;
+    setSettings(data || null);
+  } catch (err) {
+    console.error("Error fetching platform settings:", err);
+    setSettings(null);
+  } finally {
+    setIsLoading(false);
+  }
+  }, []);
 
   useEffect(() => {
     fetchSettings();
-  }, []);
+  }, [fetchSettings]);
 
   return { settings, isLoading, refetch: fetchSettings };
 }
@@ -211,7 +248,7 @@ export function useAdminStats() {
   });
   const [isLoading, setIsLoading] = useState(true);
 
-  const fetchStats = async () => {
+  const fetchStats = useCallback(async () => {
     setIsLoading(true);
     try {
       const [{ data: usersData }, { data: depositsData }, { data: withdrawalsData }] =
@@ -233,11 +270,11 @@ export function useAdminStats() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     fetchStats();
-  }, []);
+  }, [fetchStats]);
 
   return { stats, isLoading, refetch: fetchStats };
 }
