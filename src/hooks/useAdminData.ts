@@ -22,7 +22,7 @@ const safeNumber = (value: unknown) => Number(value ?? 0);
    ADMIN STATS
 ========================================================= */
 
-export function useAdminStats() {
+export function useAdminStats(isAllowed?: boolean) {
   const [stats, setStats] = useState({
     totalUsers: 0,
     activeDeposits: 0,
@@ -34,21 +34,22 @@ export function useAdminStats() {
   const mounted = useRef(false);
 
   const fetchStats = useCallback(async () => {
+    if (!isAllowed) return;
     if (typeof window === "undefined") return; // client-only
 
     try {
       setIsLoading(true);
 
       const { count: totalUsers } = await supabase
-        .from<Profile>("profiles")
+        .from("profiles")
         .select("*", { count: "exact", head: true });
 
       const { data: deposits } = await supabase
-        .from<Deposit>("deposits")
+        .from("deposits")
         .select("amount, current_balance, profit, status");
 
       const { data: withdrawals } = await supabase
-        .from<Withdrawal>("withdrawals")
+        .from("withdrawals")
         .select("amount, status");
 
       const confirmedDeposits = deposits?.filter(d => d.status === "confirmed") ?? [];
@@ -72,7 +73,7 @@ export function useAdminStats() {
     } finally {
       if (mounted.current) setIsLoading(false);
     }
-  }, []);
+  }, [isAllowed]);
 
   useEffect(() => {
     mounted.current = true;
@@ -89,24 +90,25 @@ export function useAdminStats() {
    GENERIC FETCH HOOK
 ========================================================= */
 
-function useAdminTable<T extends Tables<string>>(table: string) {
+function useAdminTable<T extends Tables<string>>(table: string, isAllowed?: boolean) {
   const [data, setData] = useState<T[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const mounted = useRef(false);
 
   const fetchData = useCallback(async () => {
+    if (!isAllowed) return;
     if (typeof window === "undefined") return; // client-only
 
     try {
       setIsLoading(true);
-      const { data } = await supabase.from<T>(table).select("*").order("created_at", { ascending: false });
+      const { data } = await supabase.from(table).select("*").order("created_at", { ascending: false });
       if (mounted.current) setData(data ?? []);
     } catch (err) {
       console.error(`Admin ${table} error:`, err);
     } finally {
       if (mounted.current) setIsLoading(false);
     }
-  }, [table]);
+  }, [table, isAllowed]);
 
   useEffect(() => {
     mounted.current = true;
@@ -123,33 +125,134 @@ function useAdminTable<T extends Tables<string>>(table: string) {
    SPECIFIC HOOKS USING GENERIC
 ========================================================= */
 
-export const useAdminUsers = () => useAdminTable<Profile>("profiles");
-export const useAdminDeposits = () => useAdminTable<Deposit>("deposits");
-export const useAdminWithdrawals = () => useAdminTable<Withdrawal>("withdrawals");
-export const useAdminPlans = () => useAdminTable<Plan>("investment_plans");
+export const useAdminUsers = (isAllowed?: boolean) => {
+  const { data, isLoading, refetch } = useAdminTable<Profile>("profiles", isAllowed);
+
+  const updateUserStatus = async (userId: string, newStatus: string) => {
+    const { error } = await supabase
+      .from("profiles")
+      .update({ status: newStatus })
+      .eq("user_id", userId);
+    if (!error) await refetch();
+    return { success: !error, error };
+  };
+
+  // placeholder maps; more complex aggregates can be added later
+  const userDeposits: Record<string, number> = {};
+  const userWithdrawals: Record<string, number> = {};
+
+  return {
+    users: data || [],
+    userDeposits,
+    userWithdrawals,
+    isLoading,
+    updateUserStatus,
+    refetch,
+  };
+};
+
+export const useAdminDeposits = (isAllowed?: boolean) => {
+  const { data, isLoading, refetch } = useAdminTable<Deposit>("deposits", isAllowed);
+
+  const updateDepositStatus = async (depositId: string, newStatus: string) => {
+    const { error } = await supabase
+      .from("deposits")
+      .update({ status: newStatus })
+      .eq("id", depositId);
+    if (!error) await refetch();
+    return { success: !error, error };
+  };
+
+  return {
+    deposits: data || [],
+    isLoading,
+    updateDepositStatus,
+    refetch,
+  };
+};
+
+export const useAdminWithdrawals = (isAllowed?: boolean) => {
+  const { data, isLoading, refetch } = useAdminTable<Withdrawal>("withdrawals", isAllowed);
+
+  const updateWithdrawalStatus = async (withdrawalId: string, newStatus: string) => {
+    const { error } = await supabase
+      .from("withdrawals")
+      .update({ status: newStatus })
+      .eq("id", withdrawalId);
+    if (!error) await refetch();
+    return { success: !error, error };
+  };
+
+  return {
+    withdrawals: data || [],
+    isLoading,
+    updateWithdrawalStatus,
+    refetch,
+  };
+};
+
+export const useAdminPlans = (isAllowed?: boolean) => {
+  const { data, isLoading, refetch } = useAdminTable<Plan>("investment_plans", isAllowed);
+
+  const updatePlan = async (planId: string, updates: Partial<Plan>) => {
+    const { error } = await supabase
+      .from("investment_plans")
+      .update(updates)
+      .eq("id", planId);
+    if (!error) await refetch();
+    return { success: !error, error };
+  };
+
+  const deletePlan = async (planId: string) => {
+    const { error } = await supabase
+      .from("investment_plans")
+      .delete()
+      .eq("id", planId);
+    if (!error) await refetch();
+    return { success: !error, error };
+  };
+
+  const createPlan = async (plan: Partial<Plan>) => {
+    const { error } = await supabase
+      .from("investment_plans")
+      .insert(plan);
+    if (!error) await refetch();
+    return { success: !error, error };
+  };
+
+  return {
+    plans: data || [],
+    isLoading,
+    updatePlan,
+    deletePlan,
+    createPlan,
+    refetch,
+  };
+};
 
 /* =========================================================
    PLATFORM SETTINGS
 ========================================================= */
 
-export function usePlatformSettings() {
+export function usePlatformSettings(isAllowed?: boolean) {
   const [settings, setSettings] = useState<PlatformSettings | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const mounted = useRef(false);
 
   const fetchSettings = useCallback(async () => {
+    if (!isAllowed) return;
     if (typeof window === "undefined") return; // client-only
 
     try {
       setIsLoading(true);
-      const { data } = await supabase.from<PlatformSettings>("platform_settings").select("*").single();
+      const { data } = await supabase.from("platform_settings").select("*").single();
       if (mounted.current) setSettings(data ?? null);
     } catch (err) {
       console.error("Platform settings error:", err);
     } finally {
       if (mounted.current) setIsLoading(false);
     }
-  }, []);
+  }, [isAllowed]);
 
   useEffect(() => {
     mounted.current = true;
@@ -159,5 +262,21 @@ export function usePlatformSettings() {
     };
   }, [fetchSettings]);
 
-  return { settings, isLoading, refetch: fetchSettings };
+const updateSetting = async (key: string, value: any) => {
+    try {
+      const updatePayload: any = {};
+      updatePayload[key] = value;
+      const { error } = await supabase
+        .from("platform_settings")
+        .update(updatePayload);
+      if (error) throw error;
+      await fetchSettings();
+      return { success: true, error: null };
+    } catch (err) {
+      console.error("updateSetting error:", err);
+      return { success: false, error: err };
+    }
+  };
+
+  return { settings, isLoading, refetch: fetchSettings, updateSetting };
       }
