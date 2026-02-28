@@ -6,14 +6,7 @@ interface AuthContextType {
   isAdmin: boolean | null;
   authReady: boolean;
   isLoading: boolean;
-  signIn: (email: string, password: string) => Promise<{ error: any | null }>;
-  signUp: (
-    email: string,
-    password: string,
-    fullName: string,
-    country: string,
-    phone: string
-  ) => Promise<{ error: any | null }>;
+  signIn: (email: string, password: string) => Promise<{ error: any | null; user?: any }>;
   signOut: () => Promise<void>;
 }
 
@@ -23,7 +16,6 @@ const AuthContext = createContext<AuthContextType>({
   authReady: false,
   isLoading: false,
   signIn: async () => ({ error: null }),
-  signUp: async () => ({ error: null }),
   signOut: async () => {},
 });
 
@@ -33,8 +25,25 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [authReady, setAuthReady] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
 
-  // Fetch profile by user ID
-  const fetchUser = async (userId: string) => {
+  // Check if user already logged in on mount
+  useEffect(() => {
+    const initAuth = async () => {
+      const {
+        data: { session },
+        error,
+      } = await supabase.auth.getSession();
+
+      if (session?.user) {
+        await fetchUserProfile(session.user.id);
+      } else {
+        setAuthReady(true);
+      }
+    };
+
+    initAuth();
+  }, []);
+
+  const fetchUserProfile = async (userId: string) => {
     try {
       const { data, error } = await supabase
         .from("profiles")
@@ -50,107 +59,45 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       console.error("Fetch user error:", err);
       setUser(null);
       setIsAdmin(false);
+    } finally {
+      setAuthReady(true);
     }
   };
 
-  // Sign in
   const signIn = async (email: string, password: string) => {
     setIsLoading(true);
     try {
       const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-      if (error) return { error };
 
-      if (data.user) await fetchUser(data.user.id);
-      return { error: null };
+      if (error || !data.user) return { error };
+
+      await fetchUserProfile(data.user.id);
+
+      return { error: null, user: data.user };
     } catch (err) {
-      console.error("SignIn error:", err);
+      console.error("Sign in error:", err);
       return { error: err };
     } finally {
       setIsLoading(false);
     }
   };
 
-  // Sign up
-  const signUp = async (
-    email: string,
-    password: string,
-    fullName: string,
-    country: string,
-    phone: string
-  ) => {
-    setIsLoading(true);
-    try {
-      const { data, error } = await supabase.auth.signUp({ email, password });
-      if (error) return { error };
-
-      if (data.user) {
-        // Insert profile in your table
-        const { error: profileError } = await supabase.from("profiles").insert({
-          id: data.user.id,
-          full_name: fullName,
-          email,
-          country,
-          phone,
-          is_admin: false
-        });
-        if (profileError) return { error: profileError };
-      }
-
-      return { error: null };
-    } catch (err) {
-      console.error("SignUp error:", err);
-      return { error: err };
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  // Sign out
   const signOut = async () => {
     setIsLoading(true);
     try {
       await supabase.auth.signOut();
       setUser(null);
       setIsAdmin(null);
+      setAuthReady(true);
     } catch (err) {
-      console.error("SignOut error:", err);
+      console.error("Sign out error:", err);
     } finally {
       setIsLoading(false);
     }
   };
 
-  // ✅ On mount, check if user is already logged in
-  useEffect(() => {
-    const getSession = async () => {
-      const {
-        data: { session }
-      } = await supabase.auth.getSession();
-
-      if (session?.user) {
-        await fetchUser(session.user.id);
-      }
-
-      setAuthReady(true);
-    };
-
-    getSession();
-
-    // Listen for auth changes (login/logout)
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (session?.user) fetchUser(session.user.id);
-      else {
-        setUser(null);
-        setIsAdmin(null);
-      }
-    });
-
-    return () => {
-      listener.subscription.unsubscribe();
-    };
-  }, []);
-
   return (
-    <AuthContext.Provider value={{ user, isAdmin, authReady, isLoading, signIn, signUp, signOut }}>
+    <AuthContext.Provider value={{ user, isAdmin, authReady, isLoading, signIn, signOut }}>
       {children}
     </AuthContext.Provider>
   );
