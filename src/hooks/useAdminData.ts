@@ -1,4 +1,4 @@
-// useAdminData.ts
+// src/hooks/useAdminData.ts
 import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Tables } from "@/integrations/supabase/types";
@@ -13,10 +13,18 @@ interface DepositWithPlan extends DepositRow {
   roi_percentage?: number;
 }
 
+interface AdminStats {
+  totalUsers: number;
+  totalDeposits: number;
+  totalWithdrawals: number;
+  activeDeposits: number;
+  balance: number;
+}
+
 // ----------------------------
 // Fetch All Users
 // ----------------------------
-export function useAllUsers() {
+export function useAdminUsers() {
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -44,7 +52,7 @@ export function useAllUsers() {
 // ----------------------------
 // Fetch All Deposits
 // ----------------------------
-export function useAllDeposits() {
+export function useAdminDeposits() {
   const [deposits, setDeposits] = useState<DepositWithPlan[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -94,7 +102,7 @@ export function useAllDeposits() {
 // ----------------------------
 // Fetch All Withdrawals
 // ----------------------------
-export function useAllWithdrawals() {
+export function useAdminWithdrawals() {
   const [withdrawals, setWithdrawals] = useState<WithdrawalRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -105,7 +113,6 @@ export function useAllWithdrawals() {
         .from("withdrawals")
         .select("*")
         .order("created_at", { ascending: false });
-
       if (error) throw error;
       setWithdrawals(data || []);
     } catch (err) {
@@ -126,7 +133,7 @@ export function useAllWithdrawals() {
 // ----------------------------
 // Fetch All Investment Plans
 // ----------------------------
-export function useAllInvestmentPlans() {
+export function useAdminInvestmentPlans() {
   const [plans, setPlans] = useState<InvestmentPlan[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -137,7 +144,6 @@ export function useAllInvestmentPlans() {
         .from("investment_plans")
         .select("*")
         .order("min_amount", { ascending: true });
-
       if (error) throw error;
       setPlans(data || []);
     } catch (err) {
@@ -153,4 +159,32 @@ export function useAllInvestmentPlans() {
   }, []);
 
   return { plans, isLoading, refetch: fetchPlans };
-         }
+}
+
+// ----------------------------
+// Admin Stats Aggregator
+// ----------------------------
+export function useAdminStats() {
+  const { users, isLoading: usersLoading } = useAdminUsers();
+  const { deposits, isLoading: depositsLoading } = useAdminDeposits();
+  const { withdrawals, isLoading: withdrawalsLoading } = useAdminWithdrawals();
+
+  const totalUsers = users.length;
+  const totalDeposits = deposits.reduce((sum, d) => sum + Number(d.amount || 0), 0);
+  const totalWithdrawals = withdrawals.reduce((sum, w) => sum + Number(w.amount || 0), 0);
+  const activeDeposits = deposits.filter((d) => d.status === "confirmed").length;
+  const balance = totalDeposits - totalWithdrawals;
+
+  const isLoading = usersLoading || depositsLoading || withdrawalsLoading;
+
+  return {
+    stats: {
+      totalUsers,
+      totalDeposits,
+      totalWithdrawals,
+      activeDeposits,
+      balance,
+    },
+    isLoading,
+  };
+    }
