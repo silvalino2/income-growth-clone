@@ -21,10 +21,11 @@ const Dashboard = () => {
   const recentTransactions = deposits.slice(0, 5);
 
   const statsData = [
-    { label: "Total Balance", value: `$${stats.totalBalance.toFixed(2)}`, icon: Wallet, color: "text-primary" },
-    { label: "Total Profit", value: `$${stats.totalProfit.toFixed(2)}`, icon: TrendingUp, color: "text-success" },
-    { label: "Total Deposit", value: `$${stats.totalDeposit.toFixed(2)}`, icon: ArrowUpCircle, color: "text-info" },
-    { label: "Total Withdrawal", value: `$${stats.totalWithdrawal.toFixed(2)}`, icon: ArrowDownCircle, color: "text-warning" },
+    { label: "Total Balance", value: `$${stats.balance.toFixed(2)}`, icon: Wallet, color: "text-primary" },
+    // profit isn't tracked by hook, show 0 or calculate via deposits if needed
+    { label: "Total Profit", value: `$0.00`, icon: TrendingUp, color: "text-success" },
+    { label: "Total Deposit", value: `$${stats.totalDeposits.toFixed(2)}`, icon: ArrowUpCircle, color: "text-info" },
+    { label: "Total Withdrawal", value: `$${stats.totalWithdrawals.toFixed(2)}`, icon: ArrowDownCircle, color: "text-warning" },
   ];
 
   const displayName = profile?.full_name?.split(' ')[0] || 'Investor';
@@ -178,7 +179,9 @@ const Dashboard = () => {
               <button 
                 className="btn-hero text-sm px-4 py-2"
                 onClick={() => {
-                  navigator.clipboard.writeText(profile?.referral_code || '');
+                  if (typeof navigator !== 'undefined' && navigator.clipboard) {
+                    navigator.clipboard.writeText(profile?.referral_code || '');
+                  }
                 }}
               >
                 Copy
