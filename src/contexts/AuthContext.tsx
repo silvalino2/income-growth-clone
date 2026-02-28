@@ -1,23 +1,22 @@
-import { createContext, useContext, useState, ReactNode } from "react";
+import { createContext, useContext, useEffect, useState, ReactNode } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { useNavigate } from "react-router-dom";
 
-type AuthContextType = {
+interface AuthContextProps {
   user: any | null;
   isAdmin: boolean | null;
   authReady: boolean;
-  signIn: (email: string, password: string) => Promise<{ error: any }>;
+  signIn: (email: string, password: string) => Promise<{ error: any | null }>;
   signUp: (
     email: string,
     password: string,
     fullName?: string,
     country?: string,
     phone?: string
-  ) => Promise<{ error: any }>;
+  ) => Promise<{ error: any | null }>;
   signOut: () => Promise<void>;
-};
+}
 
-const AuthContext = createContext<AuthContextType>({
+const AuthContext = createContext<AuthContextProps>({
   user: null,
   isAdmin: null,
   authReady: false,
@@ -31,47 +30,65 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
   const [authReady, setAuthReady] = useState(false);
 
-  const navigate = useNavigate();
+  // Initialize Supabase auth state
+  useEffect(() => {
+    const session = supabase.auth.getSession().then(({ data }) => {
+      if (data.session?.user) {
+        fetchUser(data.session.user.id);
+      }
+      setAuthReady(true);
+    });
 
-  // --------------------------
-  // Sign In
-  // --------------------------
-  const signIn = async (email: string, password: string) => {
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session?.user) {
+        fetchUser(session.user.id);
+      } else {
+        setUser(null);
+        setIsAdmin(null);
+      }
+    });
+
+    return () => listener?.subscription.unsubscribe();
+  }, []);
+
+  // Fetch user profile from "profiles" table
+  const fetchUser = async (userId: string) => {
     try {
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
-
-      if (error) return { error };
-
-      // session is valid, fetch profile
-      const profileResp = await supabase
+      const { data, error } = await supabase
         .from("profiles")
-        .select("role")
-        .eq("id", data.user?.id)
+        .select("*")
+        .eq("id", userId)
         .single();
 
-      const role = profileResp.data?.role;
-      const adminFlag = role === "admin";
+      if (error) {
+        console.error("Fetch user error:", error);
+        setUser(null);
+        setIsAdmin(false);
+        return;
+      }
 
-      setUser(data.user);
-      setIsAdmin(adminFlag);
-      setAuthReady(true);
+      setUser(data);
+      setIsAdmin(data.is_admin ?? false); // default false if column missing
+    } catch (err) {
+      console.error("Fetch user exception:", err);
+      setUser(null);
+      setIsAdmin(false);
+    }
+  };
 
-      // Navigate after login
-      if (adminFlag) navigate("/admin");
-      else navigate("/dashboard");
-
-      return { error: null };
-    } catch (err: any) {
+  const signIn = async (email: string, password: string) => {
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+      if (data.session?.user) {
+        await fetchUser(data.session.user.id);
+      }
+      return { error };
+    } catch (err) {
+      console.error("SignIn error:", err);
       return { error: err };
     }
   };
 
-  // --------------------------
-  // Sign Up
-  // --------------------------
   const signUp = async (
     email: string,
     password: string,
@@ -80,66 +97,37 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     phone?: string
   ) => {
     try {
-      const { data, error } = await supabase.auth.signUp({
-        email,
-        password,
-        options: {
-          data: { full_name: fullName, country, phone },
-        },
-      });
-
+      const { data, error } = await supabase.auth.signUp({ email, password });
+      if (data.user) {
+        await supabase.from("profiles").insert({
+          id: data.user.id,
+          full_name: fullName ?? "",
+          email,
+          country: country ?? "",
+          phone: phone ?? "",
+          is_admin: false, // default false
+        });
+      }
       return { error };
-    } catch (err: any) {
+    } catch (err) {
+      console.error("SignUp error:", err);
       return { error: err };
     }
   };
 
-  // --------------------------
-  // Sign Out
-  // --------------------------
   const signOut = async () => {
-    await supabase.auth.signOut();
-    setUser(null);
-    setIsAdmin(null);
-    setAuthReady(true);
-    navigate("/auth");
+    try {
+      await supabase.auth.signOut();
+      setUser(null);
+      setIsAdmin(null);
+    } catch (err) {
+      console.error("SignOut error:", err);
+    }
   };
-
-  // --------------------------
-  // On page load, check session
-  // --------------------------
-  useState(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session?.user) {
-        setUser(session.user);
-        // fetch profile to get isAdmin
-        supabase
-          .from("profiles")
-          .select("role")
-          .eq("id", session.user.id)
-          .single()
-          .then((resp) => {
-            const role = resp.data?.role;
-            setIsAdmin(role === "admin");
-            setAuthReady(true);
-          })
-          .catch(() => setAuthReady(true));
-      } else {
-        setAuthReady(true);
-      }
-    });
-  });
 
   return (
     <AuthContext.Provider
-      value={{
-        user,
-        isAdmin,
-        authReady,
-        signIn,
-        signUp,
-        signOut,
-      }}
+      value={{ user, isAdmin, authReady, signIn, signUp, signOut }}
     >
       {children}
     </AuthContext.Provider>
