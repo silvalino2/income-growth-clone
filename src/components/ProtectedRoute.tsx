@@ -11,18 +11,25 @@ const ProtectedRoute = ({ children, adminOnly = false }: ProtectedRouteProps) =>
   const { user, isAdmin, authReady } = useAuth();
   const navigate = useNavigate();
 
-  // Wait until auth is ready
+  // redirect logic as side effect
+  useEffect(() => {
+    if (!authReady) return;
+    if (!user) {
+      navigate("/auth");
+      return;
+    }
+    if (adminOnly) {
+      // wait until we know if the user is admin
+      if (isAdmin === false) {
+        navigate("/dashboard");
+      }
+    }
+  }, [authReady, user, isAdmin, adminOnly, navigate]);
+
   if (!authReady) return null;
-
-  if (!user) {
-    navigate("/auth");
-    return null;
-  }
-
-  if (adminOnly && !isAdmin) {
-    navigate("/dashboard");
-    return null;
-  }
+  if (!user) return null;
+  if (adminOnly && isAdmin === null) return null; // still checking
+  if (adminOnly && isAdmin === false) return null;
 
   return <>{children}</>;
 };
