@@ -93,7 +93,10 @@ export function useUserDeposits() {
   const [isLoading, setIsLoading] = useState(true);
 
   const fetchDeposits = async () => {
-    if (!user) return;
+    if (!user) {
+  setIsLoading(false);
+  return;
+}
 
     try {
       const { data: depositsData, error } = await supabase
