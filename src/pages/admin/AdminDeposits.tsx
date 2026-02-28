@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useAuth } from "@/contexts/AuthContext";
 import AdminLayout from "@/components/admin/AdminLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,7 +15,10 @@ import { useAdminDeposits } from "@/hooks/useAdminData";
 import { format } from "date-fns";
 
 const AdminDeposits = () => {
-  const { deposits, isLoading, updateDepositStatus } = useAdminDeposits();
+  const { user, isAdmin, authReady } = useAuth();
+  const isAllowed = authReady && user && isAdmin === true;
+
+  const { deposits, isLoading, updateDepositStatus } = useAdminDeposits(isAllowed);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
 
