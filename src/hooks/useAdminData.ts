@@ -32,18 +32,39 @@ interface UserStats {
 }
 
 // ----------------------------
-// Fetch All Users (Server-side via API)
+// Fetch All Users (Enriched)
 // ----------------------------
 export function useAdminUsers() {
-  const [users, setUsers] = useState<UserProfile[]>([]);
+  const [users, setUsers] = useState<(UserProfile & { totalDeposits: number; lastLogin: string })[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   const fetchUsers = useCallback(async () => {
     setIsLoading(true);
     try {
-      const res = await fetch("/api/admin/users");
-      const data: UserProfile[] = await res.json();
-      setUsers(data || []);
+      // Get all users
+      const { data: profilesData, error: profilesError } = await supabase
+        .from("profiles")
+        .select("*");
+      if (profilesError) throw profilesError;
+
+      // Get all deposits
+      const { data: depositsData } = await supabase.from("deposits").select("user_id, amount");
+
+      // Compute total deposits per user
+      const depositsMap = new Map<string, number>();
+      depositsData?.forEach(d => {
+        const prev = depositsMap.get(d.user_id) || 0;
+        depositsMap.set(d.user_id, prev + Number(d.amount || 0));
+      });
+
+      // Enrich users with totalDeposits and lastLogin
+      const enrichedUsers = (profilesData || []).map(u => ({
+        ...u,
+        totalDeposits: depositsMap.get(u.id) || 0,
+        lastLogin: u.last_sign_in_at || "Never",
+      }));
+
+      setUsers(enrichedUsers);
     } catch (err) {
       console.error("Error fetching users:", err);
       setUsers([]);
@@ -97,18 +118,16 @@ export function useAdminDeposits() {
         .from("investment_plans")
         .select("id, name, roi_percentage");
 
-      const plansMap = new Map(plansData?.map((p) => [p.id, p]) || []);
+      const plansMap = new Map(plansData?.map(p => [p.id, p]) || []);
 
-      const enrichedDeposits: DepositWithPlan[] = (depositsData || []).map(
-        (deposit) => {
-          const plan = deposit.plan_id ? plansMap.get(deposit.plan_id) : null;
-          return {
-            ...deposit,
-            plan_name: plan?.name || "N/A",
-            roi_percentage: plan?.roi_percentage || 0,
-          };
-        }
-      );
+      const enrichedDeposits = (depositsData || []).map(dep => {
+        const plan = dep.plan_id ? plansMap.get(dep.plan_id) : null;
+        return {
+          ...dep,
+          plan_name: plan?.name || "N/A",
+          roi_percentage: plan?.roi_percentage || 0,
+        };
+      });
 
       setDeposits(enrichedDeposits);
     } catch (err) {
@@ -127,14 +146,10 @@ export function useAdminDeposits() {
   // Compute per-user stats
   // ----------------------------
   const getUserStats = (userId: string): UserStats => {
-    const userDeposits = deposits.filter((d) => d.user_id === userId);
-    const totalDeposits = userDeposits.reduce(
-      (sum, d) => sum + Number(d.amount || 0),
-      0
-    );
-    const activeDeposits = userDeposits.filter((d) => d.status === "active")
-      .length;
-    const balance = totalDeposits;
+    const userDeposits = deposits.filter(d => d.user_id === userId);
+    const totalDeposits = userDeposits.reduce((sum, d) => sum + Number(d.amount || 0), 0);
+    const activeDeposits = userDeposits.filter(d => d.status === "active").length;
+    const balance = totalDeposits; // Adjust if considering withdrawals separately
     return { totalDeposits, activeDeposits, balance };
   };
 
@@ -261,7 +276,7 @@ export function useAdminStats() {
       const totalUsers = usersData?.length || 0;
       const totalDeposits = depositsData?.reduce((sum, d) => sum + Number(d.amount || 0), 0) || 0;
       const totalWithdrawals = withdrawalsData?.reduce((sum, w) => sum + Number(w.amount || 0), 0) || 0;
-      const activeDeposits = depositsData?.filter((d) => d.status === "active").length || 0;
+      const activeDeposits = depositsData?.filter(d => d.status === "active").length || 0;
       const totalBalance = totalDeposits - totalWithdrawals;
 
       setStats({ totalUsers, totalDeposits, totalWithdrawals, activeDeposits, totalBalance });
@@ -280,7 +295,7 @@ export function useAdminStats() {
 }
 
 // ----------------------------
-// Aliases for backward compatibility
+// Legacy aliases for backward compatibility
 // ----------------------------
 export const useAdminPlans = useAdminInvestmentPlans;
 export const useAdminUsersLegacy = useAdminUsers;
