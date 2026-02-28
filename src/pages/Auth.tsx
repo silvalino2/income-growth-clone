@@ -46,6 +46,7 @@ const Auth = () => {
   }, [user, isAdmin, authReady, navigate]);
 
 const handleLogin = async (e: React.FormEvent) => {
+const handleLogin = async (e: React.FormEvent) => {
   e.preventDefault();
   setIsLoading(true);
 
@@ -59,7 +60,7 @@ const handleLogin = async (e: React.FormEvent) => {
 
   toast.success("Login successful!");
 
-  // Redirect immediately based on role
+  // Immediately check isAdmin from context
   if (isAdmin) navigate("/admin", { replace: true });
   else navigate("/dashboard", { replace: true });
 
