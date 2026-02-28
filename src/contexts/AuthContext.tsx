@@ -1,131 +1,149 @@
-import { createContext, useContext, useState, useEffect, ReactNode } from "react";
+import { createContext, useContext, useState, ReactNode } from "react";
+import { supabase } from "@/integrations/supabase/client";
 import { useNavigate } from "react-router-dom";
-import { createClient, SupabaseClient } from "@supabase/supabase-js";
 
-const supabaseUrl = process.env.REACT_APP_SUPABASE_URL!;
-const supabaseAnonKey = process.env.REACT_APP_SUPABASE_ANON_KEY!;
-
-const supabase: SupabaseClient = createClient(supabaseUrl, supabaseAnonKey);
-
-interface AuthContextType {
+type AuthContextType = {
   user: any | null;
   isAdmin: boolean | null;
   authReady: boolean;
-  isLoading: boolean;
   signIn: (email: string, password: string) => Promise<{ error: any }>;
   signUp: (
     email: string,
     password: string,
-    fullName: string,
+    fullName?: string,
     country?: string,
     phone?: string
   ) => Promise<{ error: any }>;
   signOut: () => Promise<void>;
-}
+};
 
-const AuthContext = createContext<AuthContextType>({} as AuthContextType);
-
-export const useAuth = () => useContext(AuthContext);
+const AuthContext = createContext<AuthContextType>({
+  user: null,
+  isAdmin: null,
+  authReady: false,
+  signIn: async () => ({ error: null }),
+  signUp: async () => ({ error: null }),
+  signOut: async () => {},
+});
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<any | null>(null);
   const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
   const [authReady, setAuthReady] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
+
   const navigate = useNavigate();
 
-  // Load session on mount
-  useEffect(() => {
-    const getSession = async () => {
-      const { data } = await supabase.auth.getSession();
-      if (data.session) {
-        setUser(data.session.user);
-        await fetchAdminStatus(data.session.user.id);
-      }
-      setAuthReady(true);
-    };
-    getSession();
-
-    const { data: listener } = supabase.auth.onAuthStateChange(
-      async (_event, session) => {
-        if (session?.user) {
-          setUser(session.user);
-          await fetchAdminStatus(session.user.id);
-        } else {
-          setUser(null);
-          setIsAdmin(null);
-        }
-      }
-    );
-
-    return () => listener.subscription.unsubscribe();
-  }, []);
-
-  const fetchAdminStatus = async (userId: string) => {
-    const { data, error } = await supabase
-      .from("profiles") // <-- your table
-      .select("is_admin")
-      .eq("user_id", userId) // <-- adjust to your PK column
-      .single();
-
-    if (error) {
-      console.error("Error fetching admin status:", error);
-      setIsAdmin(false);
-    } else {
-      setIsAdmin(data?.is_admin || false);
-    }
-  };
-
+  // --------------------------
+  // Sign In
+  // --------------------------
   const signIn = async (email: string, password: string) => {
-    setIsLoading(true);
-    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-    if (data?.user) {
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+
+      if (error) return { error };
+
+      // session is valid, fetch profile
+      const profileResp = await supabase
+        .from("profiles")
+        .select("role")
+        .eq("id", data.user?.id)
+        .single();
+
+      const role = profileResp.data?.role;
+      const adminFlag = role === "admin";
+
       setUser(data.user);
-      await fetchAdminStatus(data.user.id);
+      setIsAdmin(adminFlag);
+      setAuthReady(true);
+
+      // Navigate after login
+      if (adminFlag) navigate("/admin");
+      else navigate("/dashboard");
+
+      return { error: null };
+    } catch (err: any) {
+      return { error: err };
     }
-    setIsLoading(false);
-    return { error };
   };
 
+  // --------------------------
+  // Sign Up
+  // --------------------------
   const signUp = async (
     email: string,
     password: string,
-    fullName: string,
+    fullName?: string,
     country?: string,
     phone?: string
   ) => {
-    setIsLoading(true);
-    const { data, error } = await supabase.auth.signUp(
-      { email, password },
-      { data: { full_name: fullName, country, phone } }
-    );
-
-    if (data?.user) {
-      // Insert into profiles table with is_admin=false
-      await supabase.from("profiles").insert({
-        user_id: data.user.id,
-        full_name: fullName,
-        country,
-        phone,
-        is_admin: false
+    try {
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: { full_name: fullName, country, phone },
+        },
       });
+
+      return { error };
+    } catch (err: any) {
+      return { error: err };
     }
-    setIsLoading(false);
-    return { error };
   };
 
+  // --------------------------
+  // Sign Out
+  // --------------------------
   const signOut = async () => {
     await supabase.auth.signOut();
     setUser(null);
     setIsAdmin(null);
-    navigate("/auth", { replace: true });
+    setAuthReady(true);
+    navigate("/auth");
   };
+
+  // --------------------------
+  // On page load, check session
+  // --------------------------
+  useState(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session?.user) {
+        setUser(session.user);
+        // fetch profile to get isAdmin
+        supabase
+          .from("profiles")
+          .select("role")
+          .eq("id", session.user.id)
+          .single()
+          .then((resp) => {
+            const role = resp.data?.role;
+            setIsAdmin(role === "admin");
+            setAuthReady(true);
+          })
+          .catch(() => setAuthReady(true));
+      } else {
+        setAuthReady(true);
+      }
+    });
+  });
 
   return (
     <AuthContext.Provider
-      value={{ user, isAdmin, authReady, isLoading, signIn, signUp, signOut }}
+      value={{
+        user,
+        isAdmin,
+        authReady,
+        signIn,
+        signUp,
+        signOut,
+      }}
     >
       {children}
     </AuthContext.Provider>
   );
 };
+
+export const useAuth = () => useContext(AuthContext);
