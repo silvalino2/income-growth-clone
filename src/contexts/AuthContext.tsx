@@ -5,28 +5,32 @@ import { User } from "@supabase/supabase-js";
 interface AuthContextType {
   user: User | null;
   isAdmin: boolean | null;
-  authReady: boolean;
+  isLoading: boolean;
+  signIn: (email: string, password: string) => Promise<{ error: any }>;
+  signUp: (
+    email: string,
+    password: string,
+    fullName: string,
+    country: string,
+    phone: string
+  ) => Promise<{ error: any }>;
 }
 
-const AuthContext = createContext<AuthContextType>({
-  user: null,
-  isAdmin: null,
-  authReady: false,
-});
+const AuthContext = createContext<AuthContextType>({} as AuthContextType);
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
   const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
-  const [authReady, setAuthReady] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    const getSession = async () => {
+    const init = async () => {
       const { data } = await supabase.auth.getSession();
       setUser(data.session?.user ?? null);
-      setAuthReady(true);
+      setIsLoading(false);
     };
 
-    getSession();
+    init();
 
     const {
       data: { subscription },
@@ -34,9 +38,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       setUser(session?.user ?? null);
     });
 
-    return () => {
-      subscription.unsubscribe();
-    };
+    return () => subscription.unsubscribe();
   }, []);
 
   useEffect(() => {
@@ -46,24 +48,56 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         return;
       }
 
-      const { data, error } = await supabase
+      const { data } = await supabase
         .from("profiles")
         .select("is_admin")
         .eq("id", user.id)
         .single();
 
-      if (error) {
-        setIsAdmin(false);
-      } else {
-        setIsAdmin(data?.is_admin ?? false);
-      }
+      setIsAdmin(data?.is_admin ?? false);
     };
 
     checkAdmin();
   }, [user]);
 
+  const signIn = async (email: string, password: string) => {
+    const { error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
+
+    return { error };
+  };
+
+  const signUp = async (
+    email: string,
+    password: string,
+    fullName: string,
+    country: string,
+    phone: string
+  ) => {
+    const { error, data } = await supabase.auth.signUp({
+      email,
+      password,
+    });
+
+    if (!error && data.user) {
+      await supabase.from("profiles").insert({
+        id: data.user.id,
+        full_name: fullName,
+        country,
+        phone,
+        is_admin: false,
+      });
+    }
+
+    return { error };
+  };
+
   return (
-    <AuthContext.Provider value={{ user, isAdmin, authReady }}>
+    <AuthContext.Provider
+      value={{ user, isAdmin, isLoading, signIn, signUp }}
+    >
       {children}
     </AuthContext.Provider>
   );
