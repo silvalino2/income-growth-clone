@@ -1,119 +1,131 @@
-import { createContext, useContext, useEffect, useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import { createContext, useContext, useState, useEffect, ReactNode } from "react";
+import { useNavigate } from "react-router-dom";
+import { createClient, SupabaseClient } from "@supabase/supabase-js";
 
-type AuthContextType = {
+const supabaseUrl = process.env.REACT_APP_SUPABASE_URL!;
+const supabaseAnonKey = process.env.REACT_APP_SUPABASE_ANON_KEY!;
+
+const supabase: SupabaseClient = createClient(supabaseUrl, supabaseAnonKey);
+
+interface AuthContextType {
   user: any | null;
   isAdmin: boolean | null;
   authReady: boolean;
-  signIn: (email: string, password: string) => Promise<{ error: any | null }>;
-  signOut: () => Promise<void>;
+  isLoading: boolean;
+  signIn: (email: string, password: string) => Promise<{ error: any }>;
   signUp: (
     email: string,
     password: string,
-    fullName?: string,
+    fullName: string,
     country?: string,
     phone?: string
-  ) => Promise<{ error: any | null }>;
-};
+  ) => Promise<{ error: any }>;
+  signOut: () => Promise<void>;
+}
 
-const AuthContext = createContext<AuthContextType>({
-  user: null,
-  isAdmin: null,
-  authReady: false,
-  signIn: async () => ({ error: null }),
-  signOut: async () => {},
-  signUp: async () => ({ error: null }),
-});
+const AuthContext = createContext<AuthContextType>({} as AuthContextType);
 
-export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
+export const useAuth = () => useContext(AuthContext);
+
+export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<any | null>(null);
   const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
   const [authReady, setAuthReady] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const navigate = useNavigate();
 
-  // Handle Supabase auth state change
+  // Load session on mount
   useEffect(() => {
-    const session = supabase.auth.getSession().then(({ data }) => {
-      if (data.session?.user) setUser(data.session.user);
-    });
-
-    const { data: listener } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      if (session?.user) {
-        setUser(session.user);
-      } else {
-        setUser(null);
-        setIsAdmin(null);
+    const getSession = async () => {
+      const { data } = await supabase.auth.getSession();
+      if (data.session) {
+        setUser(data.session.user);
+        await fetchAdminStatus(data.session.user.id);
       }
-    });
+      setAuthReady(true);
+    };
+    getSession();
+
+    const { data: listener } = supabase.auth.onAuthStateChange(
+      async (_event, session) => {
+        if (session?.user) {
+          setUser(session.user);
+          await fetchAdminStatus(session.user.id);
+        } else {
+          setUser(null);
+          setIsAdmin(null);
+        }
+      }
+    );
 
     return () => listener.subscription.unsubscribe();
   }, []);
 
-  // Fetch profile and determine admin role
-  useEffect(() => {
-    const fetchProfile = async () => {
-      if (!user) {
-        setIsAdmin(null);
-        setAuthReady(true);
-        return;
-      }
+  const fetchAdminStatus = async (userId: string) => {
+    const { data, error } = await supabase
+      .from("profiles") // <-- your table
+      .select("is_admin")
+      .eq("user_id", userId) // <-- adjust to your PK column
+      .single();
 
-      try {
-        const { data: profile, error } = await supabase
-          .from("profiles")
-          .select("is_admin")
-          .eq("id", user.id)
-          .single();
+    if (error) {
+      console.error("Error fetching admin status:", error);
+      setIsAdmin(false);
+    } else {
+      setIsAdmin(data?.is_admin || false);
+    }
+  };
 
-        if (error) throw error;
-
-        setIsAdmin(profile?.is_admin ?? false);
-      } catch (err) {
-        console.error("Error fetching profile:", err);
-        setIsAdmin(false);
-      } finally {
-        setAuthReady(true);
-      }
-    };
-
-    fetchProfile();
-  }, [user]);
-
-  // Sign in function
   const signIn = async (email: string, password: string) => {
+    setIsLoading(true);
     const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-    if (data?.user) setUser(data.user);
+    if (data?.user) {
+      setUser(data.user);
+      await fetchAdminStatus(data.user.id);
+    }
+    setIsLoading(false);
     return { error };
   };
 
-  // Sign up function
   const signUp = async (
     email: string,
     password: string,
-    fullName?: string,
+    fullName: string,
     country?: string,
     phone?: string
   ) => {
-    const { data, error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: { data: { full_name: fullName, country, phone, is_admin: false } },
-    });
-    if (data?.user) setUser(data.user);
+    setIsLoading(true);
+    const { data, error } = await supabase.auth.signUp(
+      { email, password },
+      { data: { full_name: fullName, country, phone } }
+    );
+
+    if (data?.user) {
+      // Insert into profiles table with is_admin=false
+      await supabase.from("profiles").insert({
+        user_id: data.user.id,
+        full_name: fullName,
+        country,
+        phone,
+        is_admin: false
+      });
+    }
+    setIsLoading(false);
     return { error };
   };
 
-  // Sign out function
   const signOut = async () => {
     await supabase.auth.signOut();
     setUser(null);
     setIsAdmin(null);
+    navigate("/auth", { replace: true });
   };
 
   return (
-    <AuthContext.Provider value={{ user, isAdmin, authReady, signIn, signOut, signUp }}>
+    <AuthContext.Provider
+      value={{ user, isAdmin, authReady, isLoading, signIn, signUp, signOut }}
+    >
       {children}
     </AuthContext.Provider>
   );
 };
-
-export const useAuth = () => useContext(AuthContext);
