@@ -10,6 +10,7 @@ type UserProfile = Tables<"profiles">;
 type DepositRow = Tables<"deposits">;
 type WithdrawalRow = Tables<"withdrawals">;
 type InvestmentPlan = Tables<"investment_plans">;
+type PlatformSettingsRow = Tables<"platform_settings">;
 
 interface DepositWithPlan extends DepositRow {
   plan_name?: string;
@@ -163,6 +164,38 @@ export function useAdminInvestmentPlans() {
   }, []);
 
   return { plans, isLoading, refetch: fetchPlans };
+}
+
+// ----------------------------
+// Fetch Platform Settings
+// ----------------------------
+export function usePlatformSettings() {
+  const [settings, setSettings] = useState<PlatformSettingsRow | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  const fetchSettings = async () => {
+    setIsLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from("platform_settings")
+        .select("*")
+        .single();
+      if (error) throw error;
+
+      setSettings(data || null);
+    } catch (err) {
+      console.error("Error fetching platform settings:", err);
+      setSettings(null);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchSettings();
+  }, []);
+
+  return { settings, isLoading, refetch: fetchSettings };
 }
 
 // ----------------------------
