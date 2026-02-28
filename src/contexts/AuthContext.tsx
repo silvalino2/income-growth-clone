@@ -1,9 +1,9 @@
-import { createContext, useContext, useState, useEffect, ReactNode } from "react";
+import { createContext, useContext, useState, ReactNode } from "react";
 import { supabase } from "@/integrations/supabase/client";
 
 interface AuthContextType {
   user: any | null;
-  isAdmin: boolean | null;
+  isAdmin: boolean;
   authReady: boolean;
   isLoading: boolean;
   signIn: (email: string, password: string) => Promise<{ error: any | null; user?: any }>;
@@ -12,7 +12,7 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType>({
   user: null,
-  isAdmin: null,
+  isAdmin: false,
   authReady: false,
   isLoading: false,
   signIn: async () => ({ error: null }),
@@ -21,27 +21,9 @@ const AuthContext = createContext<AuthContextType>({
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<any | null>(null);
-  const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
+  const [isAdmin, setIsAdmin] = useState<boolean>(false);
   const [authReady, setAuthReady] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-
-  // Check if user already logged in on mount
-  useEffect(() => {
-    const initAuth = async () => {
-      const {
-        data: { session },
-        error,
-      } = await supabase.auth.getSession();
-
-      if (session?.user) {
-        await fetchUserProfile(session.user.id);
-      } else {
-        setAuthReady(true);
-      }
-    };
-
-    initAuth();
-  }, []);
 
   const fetchUserProfile = async (userId: string) => {
     try {
@@ -54,9 +36,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       if (error) throw error;
 
       setUser(data);
-      setIsAdmin(data.is_admin ?? false);
+      setIsAdmin(data?.is_admin ?? false); // always boolean
     } catch (err) {
-      console.error("Fetch user error:", err);
+      console.error("Fetch user profile error:", err);
       setUser(null);
       setIsAdmin(false);
     } finally {
@@ -69,9 +51,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     try {
       const { data, error } = await supabase.auth.signInWithPassword({ email, password });
 
-      if (error || !data.user) return { error };
+      if (error) return { error };
 
-      await fetchUserProfile(data.user.id);
+      if (data.user) {
+        await fetchUserProfile(data.user.id); // ensures user & isAdmin are ready
+      }
 
       return { error: null, user: data.user };
     } catch (err) {
@@ -87,7 +71,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     try {
       await supabase.auth.signOut();
       setUser(null);
-      setIsAdmin(null);
+      setIsAdmin(false);
       setAuthReady(true);
     } catch (err) {
       console.error("Sign out error:", err);
