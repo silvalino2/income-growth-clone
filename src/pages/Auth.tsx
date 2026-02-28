@@ -45,8 +45,7 @@ const Auth = () => {
     }
   }, [user, isAdmin, authReady, navigate]);
 
-  // Login handler
-  const handleLogin = async (e: React.FormEvent) => {
+const handleLogin = async (e: React.FormEvent) => {
   e.preventDefault();
   setIsLoading(true);
 
@@ -58,28 +57,10 @@ const Auth = () => {
     return;
   }
 
-  // Fetch profile immediately after login
-  const { data: profile, error: profileError } = await supabase
-    .from("profiles")
-    .select("*")
-    .eq("id", supaUser.id)
-    .single();
-
-  if (profileError || !profile) {
-    toast.error("Failed to fetch profile");
-    setIsLoading(false);
-    return;
-  }
-
-  // Update AuthContext state
-  setUser(profile);
-  setIsAdmin(profile.is_admin ?? false);
-  setAuthReady(true);
-
   toast.success("Login successful!");
 
   // Redirect immediately based on role
-  if (profile.is_admin) navigate("/admin", { replace: true });
+  if (isAdmin) navigate("/admin", { replace: true });
   else navigate("/dashboard", { replace: true });
 
   setIsLoading(false);
