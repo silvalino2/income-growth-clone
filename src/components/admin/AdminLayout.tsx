@@ -1,12 +1,12 @@
 import { useState, useEffect } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { 
-  LayoutDashboard, 
-  Users, 
-  Wallet, 
-  ArrowUpCircle, 
-  ArrowDownCircle, 
-  Settings, 
+import {
+  LayoutDashboard,
+  Users,
+  Wallet,
+  ArrowUpCircle,
+  ArrowDownCircle,
+  Settings,
   LogOut,
   Menu,
   X,
@@ -32,7 +32,7 @@ const menuItems = [
 const AdminLayout = ({ children }: AdminLayoutProps) => {
   const location = useLocation();
   const navigate = useNavigate();
-  const { user, isAdmin, authReady, isLoading, signOut } = useAuth();
+  const { user, isAdmin, authReady, signOut } = useAuth();
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   // Redirect if not logged in or not admin after authReady
@@ -52,39 +52,18 @@ const AdminLayout = ({ children }: AdminLayoutProps) => {
     navigate("/");
   };
 
-  if (!authReady || isLoading) {
-
-  const handleLogout = async () => {
-    await signOut();
-    toast.success("Logged out successfully");
-    navigate("/");
-  };
-
-  if (isLoading) {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="text-center">
-          <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-          <p className="text-muted-foreground">Loading...</p>
-        </div>
-      </div>
-    );
-  }
-
   if (!user || !isAdmin) {
     return null;
   }
 
   return (
     <div className="min-h-screen bg-background flex">
-      {/* Sidebar */}
-      <aside className={`
-        fixed lg:static inset-y-0 left-0 z-50 w-64 bg-sidebar border-r border-sidebar-border
-        transform transition-transform duration-300 lg:transform-none
-        ${isSidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}
-      `}>
+      <aside
+        className={`fixed lg:static inset-y-0 left-0 z-50 w-64 bg-sidebar border-r border-sidebar-border transform transition-transform duration-300 lg:transform-none ${
+          isSidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
+        }`}
+      >
         <div className="flex flex-col h-full">
-          {/* Logo */}
           <div className="p-6 border-b border-sidebar-border">
             <Link to="/admin" className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-lg bg-destructive flex items-center justify-center">
@@ -92,12 +71,13 @@ const AdminLayout = ({ children }: AdminLayoutProps) => {
               </div>
               <div>
                 <span className="font-heading font-bold block">ADMIN</span>
-                <span className="text-xs text-muted-foreground">INCOME-GROWTH</span>
+                <span className="text-xs text-muted-foreground">
+                  INCOME-GROWTH
+                </span>
               </div>
             </Link>
           </div>
 
-          {/* Navigation */}
           <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
             {menuItems.map((item) => {
               const isActive = location.pathname === item.href;
@@ -106,7 +86,9 @@ const AdminLayout = ({ children }: AdminLayoutProps) => {
                   key={item.href}
                   to={item.href}
                   onClick={() => setIsSidebarOpen(false)}
-                  className={isActive ? "sidebar-item-active" : "sidebar-item"}
+                  className={
+                    isActive ? "sidebar-item-active" : "sidebar-item"
+                  }
                 >
                   <item.icon className="w-5 h-5" />
                   <span>{item.label}</span>
@@ -115,7 +97,6 @@ const AdminLayout = ({ children }: AdminLayoutProps) => {
             })}
           </nav>
 
-          {/* Logout */}
           <div className="p-4 border-t border-sidebar-border">
             <button
               onClick={handleLogout}
@@ -128,23 +109,24 @@ const AdminLayout = ({ children }: AdminLayoutProps) => {
         </div>
       </aside>
 
-      {/* Mobile overlay */}
       {isSidebarOpen && (
-        <div 
+        <div
           className="fixed inset-0 bg-background/80 backdrop-blur-sm z-40 lg:hidden"
           onClick={() => setIsSidebarOpen(false)}
         />
       )}
 
-      {/* Main Content */}
       <div className="flex-1 flex flex-col min-h-screen">
-        {/* Top Header */}
         <header className="h-16 border-b border-border flex items-center justify-between px-4 lg:px-8 bg-destructive/5">
           <button
             className="lg:hidden p-2 hover:bg-secondary rounded-lg"
             onClick={() => setIsSidebarOpen(!isSidebarOpen)}
           >
-            {isSidebarOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
+            {isSidebarOpen ? (
+              <X className="w-6 h-6" />
+            ) : (
+              <Menu className="w-6 h-6" />
+            )}
           </button>
 
           <div className="hidden lg:flex items-center gap-2 text-sm">
@@ -169,10 +151,7 @@ const AdminLayout = ({ children }: AdminLayoutProps) => {
           </div>
         </header>
 
-        {/* Page Content */}
-        <main className="flex-1 p-4 lg:p-8 overflow-y-auto">
-          {children}
-        </main>
+        <main className="flex-1 p-4 lg:p-8 overflow-y-auto">{children}</main>
       </div>
     </div>
   );
