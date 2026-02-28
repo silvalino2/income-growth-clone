@@ -47,20 +47,43 @@ const Auth = () => {
 
   // Login handler
   const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsLoading(true);
+  e.preventDefault();
+  setIsLoading(true);
 
-    const { error } = await signIn(loginData.email, loginData.password);
+  const { error, user: supaUser } = await signIn(loginData.email, loginData.password);
 
-    if (error) {
-      toast.error(error.message || "Login failed");
-    } else {
-      toast.success("Login successful!");
-      // Navigation handled by useEffect above
-    }
-
+  if (error || !supaUser) {
+    toast.error(error?.message || "Login failed");
     setIsLoading(false);
-  };
+    return;
+  }
+
+  // Fetch profile immediately after login
+  const { data: profile, error: profileError } = await supabase
+    .from("profiles")
+    .select("*")
+    .eq("id", supaUser.id)
+    .single();
+
+  if (profileError || !profile) {
+    toast.error("Failed to fetch profile");
+    setIsLoading(false);
+    return;
+  }
+
+  // Update AuthContext state
+  setUser(profile);
+  setIsAdmin(profile.is_admin ?? false);
+  setAuthReady(true);
+
+  toast.success("Login successful!");
+
+  // Redirect immediately based on role
+  if (profile.is_admin) navigate("/admin", { replace: true });
+  else navigate("/dashboard", { replace: true });
+
+  setIsLoading(false);
+};
 
   // Register handler
   const handleRegister = async (e: React.FormEvent) => {
