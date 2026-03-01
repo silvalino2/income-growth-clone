@@ -16,6 +16,7 @@ interface SafeUser extends UserProfile {
   user_id: string; // normalized key
   totalDeposits: number;
   totalWithdrawals: number;
+  totalProfit: number; // NEW
   lastLogin: string;
 }
 
@@ -50,14 +51,7 @@ export function useAdminUsers() {
         .select("*");
       if (profileError) throw profileError;
 
-      const safeUsers: SafeUser[] = (profilesData || []).map((u: any) => ({
-        ...u,
-        user_id: u.user_id || u.id,
-        totalDeposits: 0,
-        totalWithdrawals: 0,
-        lastLogin: u.last_sign_in_at || "Never",
-      }));
-
+      // Fetch deposits & withdrawals totals
       const { data: depositsData } = await supabase
         .from("deposits")
         .select("user_id, amount");
@@ -76,17 +70,21 @@ export function useAdminUsers() {
         withdrawalsMap[uid] = (withdrawalsMap[uid] || 0) + Number(w.amount || 0);
       });
 
-      const finalUsers = safeUsers.map(u => ({
+      // Map users with deposits, withdrawals & profit
+      const safeUsers: SafeUser[] = (profilesData || []).map((u: any) => ({
         ...u,
+        user_id: u.user_id || u.id,
         totalDeposits: depositsMap[u.user_id] || 0,
         totalWithdrawals: withdrawalsMap[u.user_id] || 0,
+        totalProfit: u.totalProfit || 0, // NEW
+        lastLogin: u.last_sign_in_at || "Never",
       }));
 
       const uMap: Record<string, SafeUser> = Object.fromEntries(
-        finalUsers.map(u => [u.user_id, u])
+        safeUsers.map(u => [u.user_id, u])
       );
 
-      setUsers(finalUsers);
+      setUsers(safeUsers);
       setUserDeposits(depositsMap);
       setUserWithdrawals(withdrawalsMap);
       setUserMap(uMap);
@@ -106,7 +104,7 @@ export function useAdminUsers() {
   }, [fetchUsers]);
 
   // ===============================
-  // BALANCE MANAGEMENT
+  // BALANCE & PROFIT MANAGEMENT
   // ===============================
   const setUserBalance = async (userId: string, newBalance: number) => {
     try {
@@ -119,6 +117,21 @@ export function useAdminUsers() {
       return { success: true };
     } catch (err) {
       console.error("setUserBalance error:", err);
+      return { success: false };
+    }
+  };
+
+  const setUserProfit = async (userId: string, newProfit: number) => {
+    try {
+      const { error } = await supabase
+        .from("profiles")
+        .update({ totalProfit: newProfit })
+        .eq("user_id", userId);
+      if (error) throw error;
+      await fetchUsers();
+      return { success: true };
+    } catch (err) {
+      console.error("setUserProfit error:", err);
       return { success: false };
     }
   };
@@ -157,6 +170,7 @@ export function useAdminUsers() {
     userMap,
     isLoading,
     setUserBalance,
+    setUserProfit, // NEW
     incrementUserBalance,
     decrementUserBalance,
     updateUserStatus,
