@@ -1,5 +1,4 @@
 // src/hooks/useAdminData.ts
-
 import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Tables } from "@/integrations/supabase/types";
@@ -15,9 +14,10 @@ type InvestmentPlan = Tables<"investment_plans">;
 type PlatformSettingsRow = Tables<"platform_settings">;
 
 interface SafeUser extends UserProfile {
-  user_id: string; // normalized key
+  user_id: string;
   totalDeposits: number;
   totalWithdrawals: number;
+  balance: number;
   lastLogin: string;
 }
 
@@ -40,72 +40,58 @@ interface AdminStats {
 
 export function useAdminUsers() {
   const [users, setUsers] = useState<SafeUser[]>([]);
-  const [userDeposits, setUserDeposits] = useState<Record<string, number>>({});
-  const [userWithdrawals, setUserWithdrawals] = useState<Record<string, number>>({});
   const [userMap, setUserMap] = useState<Record<string, SafeUser>>({});
   const [isLoading, setIsLoading] = useState(true);
 
   const fetchUsers = useCallback(async () => {
     setIsLoading(true);
     try {
-      // Fetch profiles
       const { data: profilesData, error: profileError } = await supabase
         .from("profiles")
         .select("*");
       if (profileError) throw profileError;
 
-      // Normalize users
-      const safeUsers: SafeUser[] = (profilesData || []).map((u: any) => ({
-        ...u,
-        user_id: u.user_id || u.id,
-        totalDeposits: 0,
-        totalWithdrawals: 0,
-        lastLogin: u.last_sign_in_at || "Never",
-      }));
-
-      // Fetch deposits
       const { data: depositsData } = await supabase
         .from("deposits")
+        .select("user_id, amount");
+
+      const { data: withdrawalsData } = await supabase
+        .from("withdrawals")
         .select("user_id, amount");
 
       const depositsMap: Record<string, number> = {};
       (depositsData || []).forEach(d => {
         const uid = d.user_id;
-        depositsMap[uid] = (depositsMap[uid] || 0) + Number(d.amount || 0);
+        depositsMap[uid] = (depositsMap[uid] || 0) + Number(d.amount ?? 0);
       });
-
-      // Fetch withdrawals
-      const { data: withdrawalsData } = await supabase
-        .from("withdrawals")
-        .select("user_id, amount");
 
       const withdrawalsMap: Record<string, number> = {};
       (withdrawalsData || []).forEach(w => {
         const uid = w.user_id;
-        withdrawalsMap[uid] = (withdrawalsMap[uid] || 0) + Number(w.amount || 0);
+        withdrawalsMap[uid] = (withdrawalsMap[uid] || 0) + Number(w.amount ?? 0);
       });
 
-      // Map users with totals
-      const finalUsers = safeUsers.map(u => ({
-        ...u,
-        totalDeposits: depositsMap[u.user_id] || 0,
-        totalWithdrawals: withdrawalsMap[u.user_id] || 0,
-      }));
+      const safeUsers: SafeUser[] = (profilesData || []).map(u => {
+        const uid = u.user_id || u.id;
+        const totalDeposits = depositsMap[uid] || 0;
+        const totalWithdrawals = withdrawalsMap[uid] || 0;
+        const balance = (u.balance || 0) + totalDeposits - totalWithdrawals;
 
-      // Create user map for quick lookup
-      const uMap: Record<string, SafeUser> = Object.fromEntries(
-        finalUsers.map(u => [u.user_id, u])
-      );
+        return {
+          ...u,
+          user_id: uid,
+          totalDeposits,
+          totalWithdrawals,
+          balance,
+          lastLogin: u.last_sign_in_at || "Never",
+        };
+      });
 
-      setUsers(finalUsers);
-      setUserDeposits(depositsMap);
-      setUserWithdrawals(withdrawalsMap);
-      setUserMap(uMap);
+      setUsers(safeUsers);
+      setUserMap(Object.fromEntries(safeUsers.map(u => [u.user_id, u])));
     } catch (err) {
       console.error("useAdminUsers error:", err);
       setUsers([]);
-      setUserDeposits({});
-      setUserWithdrawals({});
       setUserMap({});
     } finally {
       setIsLoading(false);
@@ -116,6 +102,28 @@ export function useAdminUsers() {
     fetchUsers();
   }, [fetchUsers]);
 
+  const updateUserBalance = async (userId: string, newBalance: number) => {
+    try {
+      const { error } = await supabase
+        .from("profiles")
+        .update({ balance: newBalance })
+        .eq("user_id", userId);
+      if (error) throw error;
+      fetchUsers();
+      return { success: true };
+    } catch (err) {
+      console.error("updateUserBalance error:", err);
+      return { success: false };
+    }
+  };
+
+  const adjustUserBalance = async (userId: string, amount: number) => {
+    const user = userMap[userId];
+    if (!user) return { success: false, message: "User not found" };
+    const newBalance = (user.balance || 0) + amount;
+    return await updateUserBalance(userId, newBalance);
+  };
+
   const updateUserStatus = async (userId: string, newStatus: string) => {
     try {
       const { error } = await supabase
@@ -123,6 +131,7 @@ export function useAdminUsers() {
         .update({ status: newStatus })
         .eq("user_id", userId);
       if (error) throw error;
+      fetchUsers();
       return { success: true };
     } catch (err) {
       console.error("updateUserStatus error:", err);
@@ -132,12 +141,12 @@ export function useAdminUsers() {
 
   return {
     users,
-    userDeposits,
-    userWithdrawals,
     userMap,
     isLoading,
-    updateUserStatus,
     refetch: fetchUsers,
+    updateUserBalance,
+    adjustUserBalance,
+    updateUserStatus,
   };
 }
 
