@@ -1,5 +1,4 @@
 // src/hooks/useAdminData.ts
-
 import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Tables } from "@/integrations/supabase/types";
@@ -52,13 +51,12 @@ export function useAdminUsers() {
   const fetchUsers = useCallback(async () => {
     setIsLoading(true);
     try {
-      // Fetch profiles
-      const { data: profilesData, error: profilesError } = await supabase
+      const { data, error } = await supabase
         .from("profiles")
         .select("id, user_id, name, email, balance, last_sign_in_at");
-      if (profilesError) throw profilesError;
+      if (error) throw error;
 
-      const finalUsers: SafeUser[] = (profilesData || []).map((u: any) => ({
+      const finalUsers: SafeUser[] = (data || []).map(u => ({
         ...u,
         user_id: u.user_id || u.id,
         balance: u.balance || 0,
@@ -129,41 +127,23 @@ export function useAdminDeposits() {
   const fetchDeposits = useCallback(async () => {
     setIsLoading(true);
     try {
-      // Fetch deposits
-      const { data: depositsData, error: depositsError } = await supabase
+      const { data: depositsData, error } = await supabase
         .from("deposits")
-        .select("*")
+        .select(`
+          *,
+          profiles(id, user_id, name, email, balance),
+          investment_plans(id, name, roi_percentage)
+        `)
         .order("created_at", { ascending: false });
-      if (depositsError) throw depositsError;
+      if (error) throw error;
 
-      // Fetch users
-      const { data: usersData } = await supabase
-        .from("profiles")
-        .select("id, user_id, name, email, balance");
-
-      const userMap = Object.fromEntries(
-        (usersData || []).map(u => [u.user_id || u.id, u])
-      );
-
-      // Fetch investment plans
-      const { data: plansData } = await supabase
-        .from("investment_plans")
-        .select("id, name, roi_percentage");
-
-      const planMap = new Map((plansData || []).map(p => [p.id, p]));
-
-      // Enrich deposits
-      const enriched: DepositWithUser[] = (depositsData || []).map(d => {
-        const user = userMap[d.user_id];
-        const plan = d.plan_id ? planMap.get(d.plan_id) : null;
-        return {
-          ...d,
-          user_name: user?.name || user?.email || "Unknown User",
-          user_balance: user?.balance || 0,
-          plan_name: plan?.name ?? "N/A",
-          roi_percentage: Number(plan?.roi_percentage ?? 0),
-        };
-      });
+      const enriched: DepositWithUser[] = (depositsData || []).map(d => ({
+        ...d,
+        user_name: d.profiles?.name || d.profiles?.email || "Unknown User",
+        user_balance: d.profiles?.balance || 0,
+        plan_name: d.investment_plans?.name ?? "N/A",
+        roi_percentage: Number(d.investment_plans?.roi_percentage ?? 0),
+      }));
 
       setDeposits(enriched);
     } catch (err) {
@@ -192,28 +172,20 @@ export function useAdminWithdrawals() {
   const fetchWithdrawals = useCallback(async () => {
     setIsLoading(true);
     try {
-      const { data: withdrawalsData, error: withdrawalsError } = await supabase
+      const { data: withdrawalsData, error } = await supabase
         .from("withdrawals")
-        .select("*")
+        .select(`
+          *,
+          profiles(id, user_id, name, email, balance)
+        `)
         .order("created_at", { ascending: false });
-      if (withdrawalsError) throw withdrawalsError;
+      if (error) throw error;
 
-      const { data: usersData } = await supabase
-        .from("profiles")
-        .select("id, user_id, name, email, balance");
-
-      const userMap = Object.fromEntries(
-        (usersData || []).map(u => [u.user_id || u.id, u])
-      );
-
-      const enriched: WithdrawalWithUser[] = (withdrawalsData || []).map(w => {
-        const user = userMap[w.user_id];
-        return {
-          ...w,
-          user_name: user?.name || user?.email || "Unknown User",
-          user_balance: user?.balance || 0,
-        };
-      });
+      const enriched: WithdrawalWithUser[] = (withdrawalsData || []).map(w => ({
+        ...w,
+        user_name: w.profiles?.name || w.profiles?.email || "Unknown User",
+        user_balance: w.profiles?.balance || 0,
+      }));
 
       setWithdrawals(enriched);
     } catch (err) {
@@ -341,7 +313,7 @@ export function useAdminStats() {
 }
 
 // ========================================================
-// EXPORT ALIASES
+// EXPORT ALIASES (LEGACY)
 // ========================================================
 
 export const useAdminPlans = useAdminInvestmentPlans;
