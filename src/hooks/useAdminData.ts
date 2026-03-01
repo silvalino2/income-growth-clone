@@ -51,12 +51,12 @@ export function useAdminUsers() {
   const fetchUsers = useCallback(async () => {
     setIsLoading(true);
     try {
-      const { data: profilesData, error } = await supabase
+      const { data, error } = await supabase
         .from("profiles")
-        .select("*");
+        .select("id, user_id, name, email, balance, last_sign_in_at");
       if (error) throw error;
 
-      const finalUsers: SafeUser[] = (profilesData || []).map(u => ({
+      const finalUsers: SafeUser[] = (data || []).map(u => ({
         ...u,
         user_id: u.user_id || u.id,
         balance: u.balance || 0,
@@ -78,7 +78,6 @@ export function useAdminUsers() {
     fetchUsers();
   }, [fetchUsers]);
 
-  // Directly set balance
   const setUserBalance = async (userId: string, newBalance: number) => {
     try {
       const { error } = await supabase
@@ -94,16 +93,14 @@ export function useAdminUsers() {
     }
   };
 
-  // Increment balance
   const incrementUserBalance = async (userId: string, amount: number) => {
-    const user = users.find(u => u.user_id === userId);
+    const user = userMap[userId];
     if (!user) return { success: false };
     return setUserBalance(userId, user.balance + amount);
   };
 
-  // Decrement balance
   const decrementUserBalance = async (userId: string, amount: number) => {
-    const user = users.find(u => u.user_id === userId);
+    const user = userMap[userId];
     if (!user) return { success: false };
     return setUserBalance(userId, user.balance - amount);
   };
@@ -230,7 +227,7 @@ export function useAdminWithdrawals() {
 }
 
 // ========================================================
-// INVESTMENT PLANS
+// INVESTMENT PLANS HOOK
 // ========================================================
 
 export function useAdminInvestmentPlans() {
@@ -262,7 +259,7 @@ export function useAdminInvestmentPlans() {
 }
 
 // ========================================================
-// PLATFORM SETTINGS
+// PLATFORM SETTINGS HOOK
 // ========================================================
 
 export function usePlatformSettings() {
@@ -294,7 +291,7 @@ export function usePlatformSettings() {
 }
 
 // ========================================================
-// ADMIN STATS
+// ADMIN STATS HOOK
 // ========================================================
 
 export function useAdminStats() {
