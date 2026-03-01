@@ -26,11 +26,12 @@ interface UserStats {
 // ----------------------------
 export function useUserStats() {
   const { user } = useAuth();
-  const [stats, setStats] = useState<UserStats>({
+  const [stats, setStats] = useState<UserStats & { totalProfit: number }>({
     totalDeposits: 0,
     totalWithdrawals: 0,
     activeDeposits: 0,
     balance: 0,
+    totalProfit: 0,
   });
   const [isLoading, setIsLoading] = useState(true);
 
@@ -38,27 +39,65 @@ export function useUserStats() {
     if (!user) return;
 
     try {
+      // 1️⃣ Get deposits
       const { data: deposits = [], error: depositsError } = await supabase
         .from("deposits")
         .select("*")
         .eq("user_id", user.id);
+
       if (depositsError) throw depositsError;
 
+      // 2️⃣ Get withdrawals
       const { data: withdrawals = [], error: withdrawalsError } = await supabase
         .from("withdrawals")
         .select("*")
         .eq("user_id", user.id);
+
       if (withdrawalsError) throw withdrawalsError;
 
-      const totalDeposits = deposits.reduce((sum, d) => sum + Number(d.amount || 0), 0);
-      const totalWithdrawals = withdrawals.reduce((sum, w) => sum + Number(w.amount || 0), 0);
-      const activeDeposits = deposits.filter(d => d.status === "active").length;
-      const balance = totalDeposits - totalWithdrawals;
+      // 3️⃣ Get user profit from users table
+      const { data: userData, error: userError } = await supabase
+        .from("users")
+        .select("total_profit")
+        .eq("id", user.id)
+        .single();
 
-      setStats({ totalDeposits, totalWithdrawals, activeDeposits, balance });
+      if (userError) throw userError;
+
+      const totalDeposits = deposits.reduce(
+        (sum, d) => sum + Number(d.amount || 0),
+        0
+      );
+
+      const totalWithdrawals = withdrawals.reduce(
+        (sum, w) => sum + Number(w.amount || 0),
+        0
+      );
+
+      const activeDeposits = deposits.filter(
+        (d) => d.status === "active"
+      ).length;
+
+      const totalProfit = Number(userData?.total_profit || 0);
+
+      const balance = totalDeposits + totalProfit - totalWithdrawals;
+
+      setStats({
+        totalDeposits,
+        totalWithdrawals,
+        activeDeposits,
+        balance,
+        totalProfit,
+      });
     } catch (err) {
       console.error("Error fetching user stats:", err);
-      setStats({ totalDeposits: 0, totalWithdrawals: 0, activeDeposits: 0, balance: 0 });
+      setStats({
+        totalDeposits: 0,
+        totalWithdrawals: 0,
+        activeDeposits: 0,
+        balance: 0,
+        totalProfit: 0,
+      });
     } finally {
       setIsLoading(false);
     }
@@ -70,8 +109,7 @@ export function useUserStats() {
   }, [fetchStats]);
 
   return { stats, isLoading, refetch: fetchStats };
-}
-
+    }
 // ----------------------------
 // User Deposits Hook
 // ----------------------------
