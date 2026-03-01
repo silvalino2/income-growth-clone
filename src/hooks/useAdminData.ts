@@ -1,4 +1,5 @@
 // src/hooks/useAdminData.ts
+
 import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Tables } from "@/integrations/supabase/types";
@@ -51,12 +52,13 @@ export function useAdminUsers() {
   const fetchUsers = useCallback(async () => {
     setIsLoading(true);
     try {
-      const { data, error } = await supabase
+      // Fetch profiles
+      const { data: profilesData, error: profilesError } = await supabase
         .from("profiles")
         .select("id, user_id, name, email, balance, last_sign_in_at");
-      if (error) throw error;
+      if (profilesError) throw profilesError;
 
-      const finalUsers: SafeUser[] = (data || []).map(u => ({
+      const finalUsers: SafeUser[] = (profilesData || []).map((u: any) => ({
         ...u,
         user_id: u.user_id || u.id,
         balance: u.balance || 0,
@@ -83,8 +85,7 @@ export function useAdminUsers() {
       const { error } = await supabase
         .from("profiles")
         .update({ balance: newBalance })
-        .eq("user_id", userId)
-        .or(`id.eq.${userId}`);
+        .eq("user_id", userId);
       if (error) throw error;
       await fetchUsers();
       return { success: true };
@@ -128,12 +129,14 @@ export function useAdminDeposits() {
   const fetchDeposits = useCallback(async () => {
     setIsLoading(true);
     try {
-      const { data: depositsData, error } = await supabase
+      // Fetch deposits
+      const { data: depositsData, error: depositsError } = await supabase
         .from("deposits")
         .select("*")
         .order("created_at", { ascending: false });
-      if (error) throw error;
+      if (depositsError) throw depositsError;
 
+      // Fetch users
       const { data: usersData } = await supabase
         .from("profiles")
         .select("id, user_id, name, email, balance");
@@ -142,20 +145,21 @@ export function useAdminDeposits() {
         (usersData || []).map(u => [u.user_id || u.id, u])
       );
 
+      // Fetch investment plans
       const { data: plansData } = await supabase
         .from("investment_plans")
         .select("id, name, roi_percentage");
 
       const planMap = new Map((plansData || []).map(p => [p.id, p]));
 
+      // Enrich deposits
       const enriched: DepositWithUser[] = (depositsData || []).map(d => {
-        const user = userMap[d.user_id || d.user_id];
+        const user = userMap[d.user_id];
         const plan = d.plan_id ? planMap.get(d.plan_id) : null;
-
         return {
           ...d,
           user_name: user?.name || user?.email || "Unknown User",
-          user_balance: user?.balance ?? 0,
+          user_balance: user?.balance || 0,
           plan_name: plan?.name ?? "N/A",
           roi_percentage: Number(plan?.roi_percentage ?? 0),
         };
@@ -188,11 +192,11 @@ export function useAdminWithdrawals() {
   const fetchWithdrawals = useCallback(async () => {
     setIsLoading(true);
     try {
-      const { data: withdrawalsData, error } = await supabase
+      const { data: withdrawalsData, error: withdrawalsError } = await supabase
         .from("withdrawals")
         .select("*")
         .order("created_at", { ascending: false });
-      if (error) throw error;
+      if (withdrawalsError) throw withdrawalsError;
 
       const { data: usersData } = await supabase
         .from("profiles")
@@ -203,11 +207,11 @@ export function useAdminWithdrawals() {
       );
 
       const enriched: WithdrawalWithUser[] = (withdrawalsData || []).map(w => {
-        const user = userMap[w.user_id || w.user_id];
+        const user = userMap[w.user_id];
         return {
           ...w,
           user_name: user?.name || user?.email || "Unknown User",
-          user_balance: user?.balance ?? 0,
+          user_balance: user?.balance || 0,
         };
       });
 
