@@ -4,9 +4,9 @@ import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Tables } from "@/integrations/supabase/types";
 
-// ========================================================
-// TYPE DEFINITIONS
-// ========================================================
+/* ========================================================
+   TYPE DEFINITIONS
+======================================================== */
 
 type UserProfile = Tables<"profiles">;
 type DepositRow = Tables<"deposits">;
@@ -14,17 +14,17 @@ type WithdrawalRow = Tables<"withdrawals">;
 type InvestmentPlan = Tables<"investment_plans">;
 type PlatformSettingsRow = Tables<"platform_settings">;
 
-interface SafeUser extends UserProfile {
+export interface SafeUser extends UserProfile {
   totalDeposits: number;
-  lastLogin: string;
+  totalWithdrawals: number;
 }
 
-interface DepositWithPlan extends DepositRow {
+export interface DepositWithPlan extends DepositRow {
   plan_name: string;
   roi_percentage: number;
 }
 
-interface AdminStats {
+export interface AdminStats {
   totalUsers: number;
   totalDeposits: number;
   totalWithdrawals: number;
@@ -32,71 +32,96 @@ interface AdminStats {
   totalBalance: number;
 }
 
-// ========================================================
-// USERS
-// ========================================================
+/* ========================================================
+   USERS
+======================================================== */
 
-export function useAdminUsers() {
+export function useAdminUsers(isAllowed?: boolean) {
   const [users, setUsers] = useState<SafeUser[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   const fetchUsers = useCallback(async () => {
+    if (!isAllowed) {
+      setUsers([]);
+      setIsLoading(false);
+      return;
+    }
+
     setIsLoading(true);
 
     try {
-      const { data: profilesData, error } = await supabase
-        .from("profiles")
-        .select("*");
+      const [
+        { data: profilesData, error: profileError },
+        { data: depositsData },
+        { data: withdrawalsData },
+      ] = await Promise.all([
+        supabase.from("profiles").select("*"),
+        supabase.from("deposits").select("user_id, amount"),
+        supabase.from("withdrawals").select("user_id, amount"),
+      ]);
 
-      if (error) {
-        console.error("Profiles error:", error);
-        setUsers([]);
-        return;
-      }
+      if (profileError) throw profileError;
 
-      const { data: depositsData } = await supabase
-        .from("deposits")
-        .select("user_id, amount");
-
-      const depositsMap = new Map<string, number>();
+      const depositMap: Record<string, number> = {};
+      const withdrawalMap: Record<string, number> = {};
 
       (depositsData || []).forEach((d) => {
-        const prev = depositsMap.get(d.user_id) || 0;
-        depositsMap.set(d.user_id, prev + Number(d.amount ?? 0));
+        depositMap[d.user_id] =
+          (depositMap[d.user_id] || 0) + Number(d.amount ?? 0);
       });
 
-      const safeUsers: SafeUser[] = (profilesData || []).map((u) => ({
-        ...u,
-        totalDeposits: Number(depositsMap.get(u.id) ?? 0),
-        lastLogin:
-          typeof u.last_sign_in_at === "string" && u.last_sign_in_at.length > 0
-            ? u.last_sign_in_at
-            : "Never",
+      (withdrawalsData || []).forEach((w) => {
+        withdrawalMap[w.user_id] =
+          (withdrawalMap[w.user_id] || 0) + Number(w.amount ?? 0);
+      });
+
+      const enrichedUsers: SafeUser[] = (profilesData || []).map((user) => ({
+        ...user,
+        totalDeposits: depositMap[user.user_id] || 0,
+        totalWithdrawals: withdrawalMap[user.user_id] || 0,
       }));
 
-      setUsers(safeUsers);
+      setUsers(enrichedUsers);
     } catch (err) {
-      console.error("Unexpected error:", err);
+      console.error("useAdminUsers error:", err);
       setUsers([]);
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [isAllowed]);
 
   useEffect(() => {
     fetchUsers();
   }, [fetchUsers]);
 
+  const updateUserStatus = async (userId: string, newStatus: string) => {
+    try {
+      const { error } = await supabase
+        .from("profiles")
+        .update({ status: newStatus })
+        .eq("user_id", userId);
+
+      if (error) throw error;
+
+      await fetchUsers();
+      return { success: true };
+    } catch (err) {
+      console.error("updateUserStatus error:", err);
+      return { success: false };
+    }
+  };
+
   return {
     users,
     isLoading,
     refetch: fetchUsers,
+    updateUserStatus,
   };
 }
 
-// ========================================================
-// DEPOSITS
-// ========================================================
+/* ========================================================
+   DEPOSITS
+======================================================== */
 
 export function useAdminDeposits() {
   const [deposits, setDeposits] = useState<DepositWithPlan[]>([]);
@@ -111,11 +136,7 @@ export function useAdminDeposits() {
         .select("*")
         .order("created_at", { ascending: false });
 
-      if (error) {
-        console.error(error);
-        setDeposits([]);
-        return;
-      }
+      if (error) throw error;
 
       const { data: plansData } = await supabase
         .from("investment_plans")
@@ -137,7 +158,7 @@ export function useAdminDeposits() {
 
       setDeposits(enriched);
     } catch (err) {
-      console.error(err);
+      console.error("useAdminDeposits error:", err);
       setDeposits([]);
     } finally {
       setIsLoading(false);
@@ -151,9 +172,9 @@ export function useAdminDeposits() {
   return { deposits, isLoading, refetch: fetchDeposits };
 }
 
-// ========================================================
-// WITHDRAWALS
-// ========================================================
+/* ========================================================
+   WITHDRAWALS
+======================================================== */
 
 export function useAdminWithdrawals() {
   const [withdrawals, setWithdrawals] = useState<WithdrawalRow[]>([]);
@@ -168,15 +189,11 @@ export function useAdminWithdrawals() {
         .select("*")
         .order("created_at", { ascending: false });
 
-      if (error) {
-        console.error(error);
-        setWithdrawals([]);
-        return;
-      }
+      if (error) throw error;
 
       setWithdrawals(data || []);
     } catch (err) {
-      console.error(err);
+      console.error("useAdminWithdrawals error:", err);
       setWithdrawals([]);
     } finally {
       setIsLoading(false);
@@ -190,9 +207,9 @@ export function useAdminWithdrawals() {
   return { withdrawals, isLoading, refetch: fetchWithdrawals };
 }
 
-// ========================================================
-// INVESTMENT PLANS
-// ========================================================
+/* ========================================================
+   INVESTMENT PLANS
+======================================================== */
 
 export function useAdminInvestmentPlans() {
   const [plans, setPlans] = useState<InvestmentPlan[]>([]);
@@ -207,15 +224,11 @@ export function useAdminInvestmentPlans() {
         .select("*")
         .order("min_amount", { ascending: true });
 
-      if (error) {
-        console.error(error);
-        setPlans([]);
-        return;
-      }
+      if (error) throw error;
 
       setPlans(data || []);
     } catch (err) {
-      console.error(err);
+      console.error("useAdminInvestmentPlans error:", err);
       setPlans([]);
     } finally {
       setIsLoading(false);
@@ -229,9 +242,9 @@ export function useAdminInvestmentPlans() {
   return { plans, isLoading, refetch: fetchPlans };
 }
 
-// ========================================================
-// PLATFORM SETTINGS
-// ========================================================
+/* ========================================================
+   PLATFORM SETTINGS
+======================================================== */
 
 export function usePlatformSettings() {
   const [settings, setSettings] = useState<PlatformSettingsRow | null>(null);
@@ -246,15 +259,11 @@ export function usePlatformSettings() {
         .select("*")
         .single();
 
-      if (error) {
-        console.error(error);
-        setSettings(null);
-        return;
-      }
+      if (error) throw error;
 
       setSettings(data);
     } catch (err) {
-      console.error(err);
+      console.error("usePlatformSettings error:", err);
       setSettings(null);
     } finally {
       setIsLoading(false);
@@ -268,9 +277,9 @@ export function usePlatformSettings() {
   return { settings, isLoading, refetch: fetchSettings };
 }
 
-// ========================================================
-// ADMIN STATS
-// ========================================================
+/* ========================================================
+   ADMIN STATS
+======================================================== */
 
 export function useAdminStats() {
   const [stats, setStats] = useState<AdminStats>({
@@ -316,7 +325,7 @@ export function useAdminStats() {
         totalBalance: totalDeposits - totalWithdrawals,
       });
     } catch (err) {
-      console.error(err);
+      console.error("useAdminStats error:", err);
     } finally {
       setIsLoading(false);
     }
@@ -329,9 +338,9 @@ export function useAdminStats() {
   return { stats, isLoading, refetch: fetchStats };
 }
 
-// ========================================================
-// EXPORT ALIASES (VERY IMPORTANT FOR DEPLOYMENT)
-// ========================================================
+/* ========================================================
+   LEGACY EXPORTS (SAFE FOR DEPLOYMENT)
+======================================================== */
 
 export const useAdminPlans = useAdminInvestmentPlans;
 export const useAdminUsersLegacy = useAdminUsers;
