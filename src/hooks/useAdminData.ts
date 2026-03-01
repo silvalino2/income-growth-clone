@@ -83,7 +83,8 @@ export function useAdminUsers() {
       const { error } = await supabase
         .from("profiles")
         .update({ balance: newBalance })
-        .eq("user_id", userId);
+        .eq("user_id", userId)
+        .or(`id.eq.${userId}`);
       if (error) throw error;
       await fetchUsers();
       return { success: true };
@@ -148,13 +149,13 @@ export function useAdminDeposits() {
       const planMap = new Map((plansData || []).map(p => [p.id, p]));
 
       const enriched: DepositWithUser[] = (depositsData || []).map(d => {
-        const user = userMap[d.user_id];
+        const user = userMap[d.user_id || d.user_id];
         const plan = d.plan_id ? planMap.get(d.plan_id) : null;
 
         return {
           ...d,
           user_name: user?.name || user?.email || "Unknown User",
-          user_balance: user?.balance || 0,
+          user_balance: user?.balance ?? 0,
           plan_name: plan?.name ?? "N/A",
           roi_percentage: Number(plan?.roi_percentage ?? 0),
         };
@@ -202,11 +203,11 @@ export function useAdminWithdrawals() {
       );
 
       const enriched: WithdrawalWithUser[] = (withdrawalsData || []).map(w => {
-        const user = userMap[w.user_id];
+        const user = userMap[w.user_id || w.user_id];
         return {
           ...w,
           user_name: user?.name || user?.email || "Unknown User",
-          user_balance: user?.balance || 0,
+          user_balance: user?.balance ?? 0,
         };
       });
 
