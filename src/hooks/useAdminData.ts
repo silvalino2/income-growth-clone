@@ -17,6 +17,7 @@ type PlatformSettingsRow = Tables<"platform_settings">;
 interface SafeUser extends UserProfile {
   user_id: string; // normalized key
   totalDeposits: number;
+  totalWithdrawals: number;
   lastLogin: string;
 }
 
@@ -46,27 +47,21 @@ export function useAdminUsers() {
 
   const fetchUsers = useCallback(async () => {
     setIsLoading(true);
-
     try {
       // Fetch profiles
       const { data: profilesData, error: profileError } = await supabase
         .from("profiles")
         .select("*");
-
       if (profileError) throw profileError;
 
-      // Normalize user_id
+      // Normalize users
       const safeUsers: SafeUser[] = (profilesData || []).map((u: any) => ({
         ...u,
         user_id: u.user_id || u.id,
         totalDeposits: 0,
+        totalWithdrawals: 0,
         lastLogin: u.last_sign_in_at || "Never",
       }));
-
-      // Create user map
-      const uMap: Record<string, SafeUser> = Object.fromEntries(
-        safeUsers.map(u => [u.user_id, u])
-      );
 
       // Fetch deposits
       const { data: depositsData } = await supabase
@@ -90,11 +85,17 @@ export function useAdminUsers() {
         withdrawalsMap[uid] = (withdrawalsMap[uid] || 0) + Number(w.amount || 0);
       });
 
-      // Update users with deposits
+      // Map users with totals
       const finalUsers = safeUsers.map(u => ({
         ...u,
         totalDeposits: depositsMap[u.user_id] || 0,
+        totalWithdrawals: withdrawalsMap[u.user_id] || 0,
       }));
+
+      // Create user map for quick lookup
+      const uMap: Record<string, SafeUser> = Object.fromEntries(
+        finalUsers.map(u => [u.user_id, u])
+      );
 
       setUsers(finalUsers);
       setUserDeposits(depositsMap);
@@ -121,9 +122,7 @@ export function useAdminUsers() {
         .from("profiles")
         .update({ status: newStatus })
         .eq("user_id", userId);
-
       if (error) throw error;
-
       return { success: true };
     } catch (err) {
       console.error("updateUserStatus error:", err);
@@ -152,13 +151,11 @@ export function useAdminDeposits() {
 
   const fetchDeposits = useCallback(async () => {
     setIsLoading(true);
-
     try {
       const { data: depositsData, error } = await supabase
         .from("deposits")
         .select("*")
         .order("created_at", { ascending: false });
-
       if (error) throw error;
 
       const { data: plansData } = await supabase
@@ -207,7 +204,6 @@ export function useAdminWithdrawals() {
         .from("withdrawals")
         .select("*")
         .order("created_at", { ascending: false });
-
       if (error) throw error;
       setWithdrawals(data || []);
     } catch (err) {
