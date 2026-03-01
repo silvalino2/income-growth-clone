@@ -14,7 +14,7 @@ type InvestmentPlan = Tables<"investment_plans">;
 type PlatformSettingsRow = Tables<"platform_settings">;
 
 interface SafeUser extends UserProfile {
-  user_id: string;
+  user_id: string; // ensure we always have user_id
   balance: number;
   lastLogin: string;
 }
@@ -51,12 +51,13 @@ export function useAdminUsers() {
   const fetchUsers = useCallback(async () => {
     setIsLoading(true);
     try {
+      // Fetch all profiles
       const { data, error } = await supabase
         .from("profiles")
-        .select("id, user_id, name, email, balance, last_sign_in_at");
+        .select("id, user_id, name, email, country, balance, status, referral_bonus, created_at, last_sign_in_at");
       if (error) throw error;
 
-      const finalUsers: SafeUser[] = (data || []).map(u => ({
+      const finalUsers: SafeUser[] = (data || []).map((u: any) => ({
         ...u,
         user_id: u.user_id || u.id,
         balance: u.balance || 0,
@@ -85,6 +86,7 @@ export function useAdminUsers() {
         .update({ balance: newBalance })
         .eq("user_id", userId);
       if (error) throw error;
+
       await fetchUsers();
       return { success: true };
     } catch (err) {
@@ -129,21 +131,38 @@ export function useAdminDeposits() {
     try {
       const { data: depositsData, error } = await supabase
         .from("deposits")
-        .select(`
-          *,
-          profiles(id, user_id, name, email, balance),
-          investment_plans(id, name, roi_percentage)
-        `)
+        .select("*")
         .order("created_at", { ascending: false });
       if (error) throw error;
 
-      const enriched: DepositWithUser[] = (depositsData || []).map(d => ({
-        ...d,
-        user_name: d.profiles?.name || d.profiles?.email || "Unknown User",
-        user_balance: d.profiles?.balance || 0,
-        plan_name: d.investment_plans?.name ?? "N/A",
-        roi_percentage: Number(d.investment_plans?.roi_percentage ?? 0),
-      }));
+      // Fetch all users to join
+      const { data: usersData } = await supabase
+        .from("profiles")
+        .select("user_id, name, email, balance");
+
+      const userMap = Object.fromEntries(
+        (usersData || []).map(u => [u.user_id, u])
+      );
+
+      // Fetch investment plans
+      const { data: plansData } = await supabase
+        .from("investment_plans")
+        .select("id, name, roi_percentage");
+
+      const planMap = new Map((plansData || []).map(p => [p.id, p]));
+
+      const enriched: DepositWithUser[] = (depositsData || []).map(d => {
+        const user = userMap[d.user_id];
+        const plan = d.plan_id ? planMap.get(d.plan_id) : null;
+
+        return {
+          ...d,
+          user_name: user?.name || user?.email || "Unknown User",
+          user_balance: user?.balance || 0,
+          plan_name: plan?.name ?? "N/A",
+          roi_percentage: Number(plan?.roi_percentage ?? 0),
+        };
+      });
 
       setDeposits(enriched);
     } catch (err) {
@@ -174,18 +193,26 @@ export function useAdminWithdrawals() {
     try {
       const { data: withdrawalsData, error } = await supabase
         .from("withdrawals")
-        .select(`
-          *,
-          profiles(id, user_id, name, email, balance)
-        `)
+        .select("*")
         .order("created_at", { ascending: false });
       if (error) throw error;
 
-      const enriched: WithdrawalWithUser[] = (withdrawalsData || []).map(w => ({
-        ...w,
-        user_name: w.profiles?.name || w.profiles?.email || "Unknown User",
-        user_balance: w.profiles?.balance || 0,
-      }));
+      const { data: usersData } = await supabase
+        .from("profiles")
+        .select("user_id, name, email, balance");
+
+      const userMap = Object.fromEntries(
+        (usersData || []).map(u => [u.user_id, u])
+      );
+
+      const enriched: WithdrawalWithUser[] = (withdrawalsData || []).map(w => {
+        const user = userMap[w.user_id];
+        return {
+          ...w,
+          user_name: user?.name || user?.email || "Unknown User",
+          user_balance: user?.balance || 0,
+        };
+      });
 
       setWithdrawals(enriched);
     } catch (err) {
@@ -286,7 +313,7 @@ export function useAdminStats() {
     try {
       const [{ data: users }, { data: deposits }, { data: withdrawals }] =
         await Promise.all([
-          supabase.from("profiles").select("id, balance"),
+          supabase.from("profiles").select("balance"),
           supabase.from("deposits").select("amount, status"),
           supabase.from("withdrawals").select("amount"),
         ]);
@@ -313,7 +340,7 @@ export function useAdminStats() {
 }
 
 // ========================================================
-// EXPORT ALIASES (LEGACY)
+// LEGACY EXPORTS (KEEP FOR FRONTEND COMPATIBILITY)
 // ========================================================
 
 export const useAdminPlans = useAdminInvestmentPlans;
